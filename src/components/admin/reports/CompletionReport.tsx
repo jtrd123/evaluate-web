@@ -1,0 +1,134 @@
+"use client";
+
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import type { ClassCompletion } from "./ReportsDashboard";
+
+interface Props {
+  overall: { total: number; done: number; pct: number };
+  byClass: ClassCompletion[];
+}
+
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+  return (
+    <div className="card text-center">
+      <div className={`text-3xl font-black mb-1 ${color ?? "text-primary"}`}>{value}</div>
+      <div className="text-xs font-semibold text-base-black/50">{label}</div>
+      {sub && <div className="text-xs text-base-black/30 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+export default function CompletionReport({ overall, byClass }: Props) {
+  const pieData = [
+    { name: "ส่งแล้ว", value: overall.done, color: "#2e006b" },
+    { name: "ยังไม่ส่ง", value: overall.total - overall.done, color: "#ffd445" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6 animate-fade-in">
+      {/* Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="มอบหมายทั้งหมด" value={overall.total} />
+        <StatCard label="ส่งแล้ว" value={overall.done} color="text-green-600" />
+        <StatCard label="ยังไม่ส่ง" value={overall.total - overall.done} color="text-amber-600" />
+        <StatCard label="อัตราสำเร็จ" value={`${overall.pct}%`} color={overall.pct >= 80 ? "text-green-600" : overall.pct >= 50 ? "text-amber-600" : "text-red-500"} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pie chart */}
+        <div className="card">
+          <h3 className="font-bold text-primary mb-4">สัดส่วนภาพรวม</h3>
+          <div className="flex items-center justify-center">
+            <div className="relative">
+              <ResponsiveContainer width={220} height={220}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={95}
+                    paddingAngle={3}
+                    dataKey="value"
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [`${v} ราย`, ""]} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center label */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-3xl font-black text-primary">{overall.pct}%</span>
+                <span className="text-xs text-base-black/40">สำเร็จ</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-center gap-6 mt-3">
+            {pieData.map((d) => (
+              <div key={d.name} className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full" style={{ background: d.color }} />
+                <span className="text-sm text-base-black/60">{d.name} ({d.value})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* By class drill-down */}
+        <div className="card">
+          <h3 className="font-bold text-primary mb-4">
+            แยกตามชั้นเรียน
+            <span className="ml-2 text-xs font-normal text-base-black/40">(เรียงจากน้อย→มาก)</span>
+          </h3>
+
+          {byClass.length === 0 ? (
+            <p className="text-sm text-base-black/40 text-center py-8">ยังไม่มีข้อมูล</p>
+          ) : (
+            <div className="flex flex-col gap-3 max-h-64 overflow-y-auto pr-1">
+              {byClass.map((c) => (
+                <div key={c.classId ?? "none"}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-base-black">{c.className}</span>
+                    <span className={`text-xs font-bold ${c.pct >= 80 ? "text-green-600" : c.pct >= 50 ? "text-amber-600" : "text-red-500"}`}>
+                      {c.completed}/{c.total} ({c.pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${c.pct >= 80 ? "bg-green-500" : c.pct >= 50 ? "bg-amber-400" : "bg-red-400"}`}
+                      style={{ width: `${c.pct}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Alert: low completion classes */}
+      {byClass.filter((c) => c.pct < 50 && c.total > 0).length > 0 && (
+        <div className="card border-l-4 border-red-400 bg-red-50">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-bold text-red-700 mb-1">ชั้นเรียนที่ยังมีสถิติต่ำ (ต่ำกว่า 50%)</p>
+              <div className="flex flex-wrap gap-2">
+                {byClass.filter((c) => c.pct < 50 && c.total > 0).map((c) => (
+                  <span key={c.classId ?? "none"} className="text-xs bg-red-100 text-red-700 font-semibold px-3 py-1 rounded-full">
+                    {c.className} — {c.pct}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Read(//Users/suppakeatviripiromgool/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/8439ed2c-acf6-4c57-a6a3-83422dd0484c/81beb2e5-9021-4cca-8898-134e6a221fb4/skills/xlsx/**)",
+      "Bash(python3 -)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}
