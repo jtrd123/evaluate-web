@@ -9,8 +9,9 @@ export default async function AdminPage() {
   const supabase = await createClient();
 
   const [
-    { data: submissions },
-    { data: assignments },
+    { data: assignmentsRaw },
+    { data: submissionsRaw },
+    { data: recentRaw },
     { data: settings },
     { count: classesCount },
     { count: teachersCount },
@@ -18,22 +19,25 @@ export default async function AdminPage() {
     { count: formsCount },
     { count: assignmentsCount },
   ] = await Promise.all([
-    supabase
-      .from("evaluation_submissions")
+    // All assignments with student class info (for class completion)
+    supabase.from("teacher_assignments").select(`
+      id,
+      student:profiles!teacher_assignments_student_id_fkey (
+        class_id, classes(name, academic_year)
+      )
+    `),
+    // All submission statuses
+    supabase.from("evaluation_submissions").select("assignment_id, is_submitted"),
+    // Recent 8 submitted (activity feed)
+    supabase.from("evaluation_submissions")
       .select(`
-        id, is_submitted, submitted_at,
-        student:profiles!evaluation_submissions_student_id_fkey (full_name, student_number),
+        id, submitted_at,
         teacher:profiles!evaluation_submissions_teacher_id_fkey (full_name, employee_id),
-        period:evaluation_periods!evaluation_submissions_period_id_fkey (title, end_at)
+        period:evaluation_periods!evaluation_submissions_period_id_fkey (title)
       `)
-      .order("submitted_at", { ascending: false }),
-    supabase
-      .from("teacher_assignments")
-      .select(`
-        id,
-        student:profiles!teacher_assignments_student_id_fkey (full_name, student_number),
-        teacher:profiles!teacher_assignments_teacher_id_fkey (full_name, employee_id)
-      `),
+      .eq("is_submitted", true)
+      .order("submitted_at", { ascending: false })
+      .limit(8),
     supabase.from("system_settings").select("key,value"),
     supabase.from("classes").select("id", { count: "exact", head: true }),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "teacher"),
@@ -42,19 +46,44 @@ export default async function AdminPage() {
     supabase.from("teacher_assignments").select("id", { count: "exact", head: true }),
   ]);
 
-  const total = assignments?.length ?? 0;
-  const done = submissions?.filter((s) => s.is_submitted).length ?? 0;
+  // ── Compute class completion ───────────────────────────────────────────────
+  const submissionMap = new Map(
+    (submissionsRaw ?? []).map((s) => [s.assignment_id, s.is_submitted])
+  );
 
+  type ClassEntry = { name: string; year: string; total: number; done: number };
+  const classMap = new Map<string, ClassEntry>();
+
+  for (const a of assignmentsRaw ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cls = (a.student as any)?.classes as { name: string; academic_year: string } | null;
+    if (!cls) continue;
+    const key = `${cls.name}|${cls.academic_year}`;
+    if (!classMap.has(key)) {
+      classMap.set(key, { name: cls.name, year: cls.academic_year, total: 0, done: 0 });
+    }
+    const entry = classMap.get(key)!;
+    entry.total++;
+    if (submissionMap.get(a.id)) entry.done++;
+  }
+
+  const classSummary = Array.from(classMap.values())
+    .sort((a, b) => (a.done / a.total || 0) - (b.done / b.total || 0));
+
+  // ── Settings ───────────────────────────────────────────────────────────────
   const settingsMap = Object.fromEntries((settings ?? []).map((s) => [s.key, s.value]));
   const evaluationsEnabled = settingsMap["evaluations_enabled"] !== "false";
   const shutdownMessage = settingsMap["shutdown_message"] ?? "ระบบปิดชั่วคราว กรุณาติดต่อผู้ดูแลระบบ";
 
+  const total = assignmentsCount ?? 0;
+  const done = (submissionsRaw ?? []).filter((s) => s.is_submitted).length;
+
+  // ── Setup checklist ────────────────────────────────────────────────────────
   const hasClasses = (classesCount ?? 0) > 0;
   const hasTeachers = (teachersCount ?? 0) > 0;
   const hasStudents = (studentsCount ?? 0) > 0;
   const hasForms = (formsCount ?? 0) > 0;
   const hasAssignments = (assignmentsCount ?? 0) > 0;
-
   const allDone = hasClasses && hasTeachers && hasStudents && hasForms && hasAssignments;
 
   const checklistSteps = [
@@ -66,23 +95,17 @@ export default async function AdminPage() {
   ];
 
   return (
-    <div>
-      <div className="mb-8 animate-fade-in">
-        <h1 className="text-2xl font-black text-primary">แดชบอร์ดผู้ดูแลระบบ</h1>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-black text-primary">แดชบอร์ด</h1>
         <p className="text-base-black/50 text-sm mt-1">ภาพรวมการประเมินทั้งหมด</p>
       </div>
 
-      {/* Getting Started Checklist */}
-      {allDone ? (
-        <div className="card mb-8 animate-slide-up flex items-center gap-3 bg-green-50 border border-green-200">
-          <span className="text-2xl">✨</span>
-          <p className="font-bold text-green-700">ตั้งค่าครบแล้ว พร้อมใช้งาน</p>
-        </div>
-      ) : (
-        <div className="card mb-8 animate-slide-up">
+      {/* Setup checklist */}
+      {!allDone && (
+        <div className="card animate-slide-up">
           <h2 className="font-bold text-base-black mb-4 flex items-center gap-2">
-            <span>📋</span>
-            <span>ขั้นตอนการตั้งค่าระบบ</span>
+            <span>📋</span> ขั้นตอนการตั้งค่าระบบ
           </h2>
           <div className="space-y-2">
             {checklistSteps.map((step, i) => (
@@ -92,10 +115,7 @@ export default async function AdminPage() {
                   {i + 1}. {step.label}
                 </span>
                 {!step.done && (
-                  <Link
-                    href={step.href}
-                    className="text-xs font-bold text-primary hover:text-primary/80 shrink-0 px-2.5 py-1 rounded-lg bg-primary/8 hover:bg-primary/15 transition-colors"
-                  >
+                  <Link href={step.href} className="text-xs font-bold text-primary px-2.5 py-1 rounded-lg bg-primary/8 hover:bg-primary/15 transition-colors">
                     → ทำเลย
                   </Link>
                 )}
@@ -105,13 +125,17 @@ export default async function AdminPage() {
         </div>
       )}
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 animate-slide-up">
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "การมอบหมายทั้งหมด", value: total, color: "text-primary" },
+          { label: "มอบหมายทั้งหมด", value: total, color: "text-primary" },
           { label: "ส่งแล้ว", value: done, color: "text-green-600" },
           { label: "ยังไม่ส่ง", value: total - done, color: "text-amber-600" },
-          { label: "% สำเร็จ", value: total > 0 ? `${Math.round((done / total) * 100)}%` : "—", color: "text-primary" },
+          {
+            label: "% สำเร็จ",
+            value: total > 0 ? `${Math.round((done / total) * 100)}%` : "—",
+            color: total > 0 && done / total >= 0.8 ? "text-green-600" : "text-primary",
+          },
         ].map((stat) => (
           <div key={stat.label} className="card text-center">
             <div className={`text-3xl font-black mb-1 ${stat.color}`}>{stat.value}</div>
@@ -120,16 +144,22 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      {/* Emergency Shutdown */}
-      <div className="mb-8">
-        <EmergencyShutdown
-          initialEnabled={evaluationsEnabled}
-          initialMessage={shutdownMessage}
-        />
+      {/* Emergency control + Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <AdminDashboard
+            classSummary={classSummary}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            recentActivity={(recentRaw ?? []) as any}
+          />
+        </div>
+        <div>
+          <EmergencyShutdown
+            initialEnabled={evaluationsEnabled}
+            initialMessage={shutdownMessage}
+          />
+        </div>
       </div>
-
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <AdminDashboard submissions={(submissions ?? []) as any} />
     </div>
   );
 }
