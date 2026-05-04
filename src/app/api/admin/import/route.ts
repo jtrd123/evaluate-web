@@ -142,45 +142,39 @@ export async function POST(req: NextRequest) {
       const alreadyExists = authErr.message.toLowerCase().includes("already") ||
                             authErr.message.includes("unique");
 
-      if (alreadyExists && updateExisting && type === "students") {
-        // Find existing auth user by email
+      if (alreadyExists) {
+        if (skipExisting) { result.skipped++; continue; }
+
+        // Default: upsert profile for existing auth user (don't touch password)
         const { data: users } = await supa.auth.admin.listUsers({ perPage: 1000 });
         const existing = users?.users?.find((u) => u.email === email);
         if (existing) {
-          const classId = await resolveClassId(r.class_name, r.academic_year);
-          // Check if profile exists
-          const { data: existingProfile } = await supa
-            .from("profiles")
-            .select("id")
-            .eq("id", existing.id)
-            .maybeSingle();
+          const classId = type === "students"
+            ? await resolveClassId(r.class_name, r.academic_year)
+            : null;
 
-          if (existingProfile) {
-            // Update existing profile
-            const { error: upErr } = await supa
-              .from("profiles")
-              .update({ class_id: classId })
-              .eq("id", existing.id);
-            if (upErr) {
-              result.errors.push({ row: i + 1, message: upErr.message });
-            } else {
-              result.success++;
-            }
+          const profilePayload: Record<string, unknown> = {
+            id: existing.id,
+            full_name: r.full_name.trim(),
+            role: type === "students" ? "student" : "teacher",
+            school_id: "SCH001",
+          };
+          if (type === "students") {
+            profilePayload.student_number = r.student_number?.trim() ?? null;
+            profilePayload.class_id = classId;
           } else {
-            // Profile missing — create it now
-            const { error: insErr } = await supa.from("profiles").insert({
-              id: existing.id,
-              full_name: r.full_name.trim(),
-              role: "student",
-              school_id: "SCH001",
-              student_number: r.student_number?.trim() ?? null,
-              class_id: classId,
-            });
-            if (insErr) {
-              result.errors.push({ row: i + 1, message: insErr.message });
-            } else {
-              result.success++;
-            }
+            profilePayload.employee_id     = r.employee_id?.trim() ?? null;
+            profilePayload.subject         = r.subject?.trim() ?? null;
+            profilePayload.teaching_levels = r.teaching_levels?.trim() ?? null;
+          }
+
+          const { error: upsertErr } = await supa
+            .from("profiles")
+            .upsert(profilePayload, { onConflict: "id" });
+          if (upsertErr) {
+            result.errors.push({ row: i + 1, message: upsertErr.message });
+          } else {
+            result.success++;
           }
         } else {
           result.skipped++;
@@ -188,15 +182,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      if (alreadyExists && skipExisting) {
-        result.skipped++;
-        continue;
-      }
-      if (alreadyExists) {
-        result.errors.push({ row: i + 1, message: `${email} มีบัญชีอยู่แล้ว` });
-      } else {
-        result.errors.push({ row: i + 1, message: authErr.message });
-      }
+      result.errors.push({ row: i + 1, message: authErr.message });
       continue;
     }
 
