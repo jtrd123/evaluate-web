@@ -57,8 +57,9 @@ export async function POST(req: NextRequest) {
     rows: ImportRow[];
     skipExisting?: boolean;      // true = skip if email already exists (add-new mode)
     updateExisting?: boolean;    // true = update class_id for existing accounts
+    academicYear?: string;       // e.g. "2568" — tag all imported profiles with this year
   };
-  const { type, rows, skipExisting = false, updateExisting = false } = body;
+  const { type, rows, skipExisting = false, updateExisting = false, academicYear } = body;
 
   if (!type || !Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -159,6 +160,7 @@ export async function POST(req: NextRequest) {
             full_name: r.full_name.trim(),
             role: type === "students" ? "student" : "teacher",
             school_id: "SCH001",
+            academic_year: academicYear ?? r.academic_year?.trim() ?? null,
           };
           if (type === "students") {
             profilePayload.student_number = r.student_number?.trim() ?? null;
@@ -201,6 +203,7 @@ export async function POST(req: NextRequest) {
       full_name: r.full_name.trim(),
       role: type === "students" ? "student" : "teacher",
       school_id: "SCH001",
+      academic_year: academicYear ?? r.academic_year?.trim() ?? null,
     };
     if (type === "students") {
       profilePayload.student_number = r.student_number?.trim() ?? null;

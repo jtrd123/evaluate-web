@@ -5,11 +5,16 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Button from "@/components/ui/Button";
 
-function getUrlError(code: string | null): string | null {
+function getUrlError(code: string | null): { msg: string; hint?: string } | null {
   if (code === "not_registered")
-    return "บัญชี Microsoft นี้ไม่ได้ลงทะเบียนในระบบ กรุณาติดต่อผู้ดูแลระบบ";
+    return { msg: "บัญชี Microsoft นี้ไม่ได้ลงทะเบียนในระบบ กรุณาติดต่อผู้ดูแลระบบ" };
   if (code === "auth_callback_failed")
-    return "การเชื่อมต่อล้มเหลว กรุณาลองใหม่";
+    return { msg: "การเชื่อมต่อล้มเหลว กรุณาลองใหม่" };
+  if (code === "link_required")
+    return {
+      msg: "บัญชี Microsoft นี้ยังไม่ได้เชื่อมต่อกับระบบ",
+      hint: "กรุณาเข้าสู่ระบบด้วยรหัสผ่านก่อน แล้วไปเชื่อมต่อ Microsoft ที่หน้า ตั้งค่า",
+    };
   return null;
 }
 
@@ -20,7 +25,8 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(urlErrorMsg);
+  const [error, setError] = useState<string | null>(urlErrorMsg?.msg ?? null);
+  const urlHint = urlErrorMsg?.hint ?? null;
 
   const supabase = createClient();
 
@@ -158,7 +164,10 @@ function LoginForm() {
                 <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
-                {error}
+                <div>
+                  <p>{error}</p>
+                  {urlHint && <p className="mt-1 text-red-600/80 text-xs">{urlHint}</p>}
+                </div>
               </div>
             )}
 

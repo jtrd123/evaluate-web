@@ -171,11 +171,14 @@ function parseWorkbook(wb: XLSX.WorkBook): { students: ParsedStudent[]; inactive
   return { students, inactive };
 }
 
+const CURRENT_THAI_YEAR = (new Date().getFullYear() + 543).toString();
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function StudentImportWizard() {
   const fileInputId = useId();
 
   const [step, setStep]                   = useState<Step>(1);
+  const [academicYear, setAcademicYear]   = useState(CURRENT_THAI_YEAR);
   const [skipExisting, setSkipExisting]   = useState(false);
   const [inputTab, setInputTab]           = useState<InputTab>("file");
   const [fileName, setFileName]           = useState("");
@@ -264,6 +267,7 @@ export default function StudentImportWizard() {
           type: "students",
           rows: batch,
           skipExisting,
+          academicYear,
         }),
       });
 
@@ -286,13 +290,29 @@ export default function StudentImportWizard() {
   function resetToStep1() {
     setStep(1); setRows([]); setFileName(""); setResult(null); setImportedRows([]);
     setManual(EMPTY_MANUAL); setManualError(null); setParseError(null);
-    setSkipExisting(false);
+    setSkipExisting(false); setAcademicYear(CURRENT_THAI_YEAR);
   }
 
   // ── Step 1 ──────────────────────────────────────────────────────────────────
   if (step === 1) {
     return (
       <div className="space-y-6">
+        {/* Academic year picker */}
+        <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
+          <svg className="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5" />
+          </svg>
+          <label className="text-sm font-bold text-primary shrink-0">ปีการศึกษา</label>
+          <input
+            type="text"
+            value={academicYear}
+            onChange={(e) => setAcademicYear(e.target.value)}
+            placeholder="เช่น 2568"
+            className="flex-1 max-w-[120px] px-3 py-1.5 rounded-xl border border-primary/30 text-sm font-mono font-bold text-primary bg-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <span className="text-xs text-primary/60">นักเรียนที่ import จะถูกจัดกลุ่มตามปีนี้</span>
+        </div>
+
         {/* File upload area */}
         <FileUploadArea fileInputId={fileInputId} parseError={parseError} onFile={handleFile} />
 

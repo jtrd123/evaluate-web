@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 interface ClassItem { id: string; name: string; academic_year: string; }
 
@@ -12,6 +11,7 @@ interface Teacher {
   employee_id: string | null;
   subject: string | null;
   teaching_levels: string | null;
+  academic_year: string | null;
 }
 
 interface Student {
@@ -218,8 +218,51 @@ function EditStudentRow({ student, classes, onSave, onCancel }: {
   );
 }
 
+function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
+  year: string; role: "teacher" | "student"; count: number;
+  onClose: () => void; onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true); setError(null);
+    const res = await fetch("/api/admin/users/bulk-delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year, role }),
+    });
+    const data = await res.json();
+    setDeleting(false);
+    if (!res.ok) { setError(data.error); return; }
+    onDeleted();
+  }
+
+  const label = role === "teacher" ? "ครู" : "นักเรียน";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <h3 className="font-bold text-base-black text-center mb-1">ลบทั้งปีการศึกษา {year}?</h3>
+        <p className="text-sm text-base-black/60 text-center mb-1">{label}ทั้งหมด {count} คน จะถูกลบออก</p>
+        <p className="text-xs text-red-600 text-center mb-5">การดำเนินการนี้ไม่สามารถยกเลิกได้ ข้อมูลและประวัติทั้งหมดจะถูกลบถาวร</p>
+        {error && <p className="text-xs text-red-600 mb-3 text-center">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50">ยกเลิก</button>
+          <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "กำลังลบ..." : `ลบ ${count} คน`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserManager({ teachers: initTeachers, students: initStudents, classes }: Props) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("teachers");
   const [teachers, setTeachers] = useState<Teacher[]>(initTeachers);
   const [students, setStudents] = useState<Student[]>(initStudents);
@@ -230,17 +273,33 @@ export default function UserManager({ teachers: initTeachers, students: initStud
   const [editingId, setEditingId] = useState<string | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [bulkDeleteYear, setBulkDeleteYear] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [yearFilter, setYearFilter] = useState<string>("__all__");
+
+  // Derive available years
+  const teacherYears = Array.from(new Set(teachers.map((t) => t.academic_year).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a));
+  const studentYears = Array.from(new Set(students.map((s) => s.class_year).filter(Boolean) as string[])).sort((a, b) => b.localeCompare(a));
+  const currentYears = tab === "teachers" ? teacherYears : studentYears;
 
   const filteredTeachers = teachers.filter((t) => {
     const q = search.toLowerCase();
-    return !q || t.full_name.toLowerCase().includes(q) || t.employee_id?.toLowerCase().includes(q) || t.subject?.toLowerCase().includes(q);
+    const matchSearch = !q || t.full_name.toLowerCase().includes(q) || t.employee_id?.toLowerCase().includes(q) || t.subject?.toLowerCase().includes(q);
+    const matchYear = yearFilter === "__all__" || t.academic_year === yearFilter;
+    return matchSearch && matchYear;
   });
 
   const filteredStudents = students.filter((s) => {
     const q = search.toLowerCase();
-    return !q || s.full_name.toLowerCase().includes(q) || s.student_number?.toLowerCase().includes(q) || s.class_name?.toLowerCase().includes(q);
+    const matchSearch = !q || s.full_name.toLowerCase().includes(q) || s.student_number?.toLowerCase().includes(q) || s.class_name?.toLowerCase().includes(q);
+    const matchYear = yearFilter === "__all__" || s.class_year === yearFilter;
+    return matchSearch && matchYear;
   });
+
+  // Count for bulk delete
+  const bulkDeleteCount = tab === "teachers"
+    ? teachers.filter((t) => t.academic_year === yearFilter).length
+    : students.filter((s) => s.class_year === yearFilter).length;
 
   const resetUser = resetUserId
     ? ([...teachers, ...students].find((u) => u.id === resetUserId) as { id: string; full_name: string } | undefined)
@@ -249,35 +308,60 @@ export default function UserManager({ teachers: initTeachers, students: initStud
   return (
     <div>
       {/* Tabs + search */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-        <div className="flex bg-gray-100 rounded-xl p-1 w-fit">
-          {(["teachers", "students"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setSearch(""); setEditingId(null); }}
-              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? "bg-white text-primary shadow-sm" : "text-base-black/50 hover:text-primary"}`}
-            >
-              {t === "teachers" ? `ครู (${teachers.length})` : `นักเรียน (${students.length})`}
-            </button>
-          ))}
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex bg-gray-100 rounded-xl p-1 w-fit">
+            {(["teachers", "students"] as Tab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setSearch(""); setEditingId(null); setYearFilter("__all__"); }}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? "bg-white text-primary shadow-sm" : "text-base-black/50 hover:text-primary"}`}
+              >
+                {t === "teachers" ? `ครู (${teachers.length})` : `นักเรียน (${students.length})`}
+              </button>
+            ))}
+          </div>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={tab === "teachers" ? "ค้นหาครู..." : "ค้นหานักเรียน..."}
+            className="border border-gray-200 rounded-xl px-4 py-2 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
         </div>
-        <button
-          onClick={() => router.refresh()}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-base-black/50 hover:text-primary hover:border-primary/30 transition-colors"
-          title="โหลดข้อมูลใหม่"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-          รีเฟรช
-        </button>
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={tab === "teachers" ? "ค้นหาครู..." : "ค้นหานักเรียน..."}
-          className="border border-gray-200 rounded-xl px-4 py-2 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
+
+        {/* Year filter tabs */}
+        {currentYears.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-base-black/40">ปีการศึกษา:</span>
+            <button
+              onClick={() => setYearFilter("__all__")}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${yearFilter === "__all__" ? "bg-primary text-white" : "bg-gray-100 text-base-black/60 hover:bg-gray-200"}`}
+            >
+              ทั้งหมด
+            </button>
+            {currentYears.map((y) => (
+              <button
+                key={y}
+                onClick={() => setYearFilter(y)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${yearFilter === y ? "bg-primary text-white" : "bg-gray-100 text-base-black/60 hover:bg-gray-200"}`}
+              >
+                {y}
+              </button>
+            ))}
+            {yearFilter !== "__all__" && bulkDeleteCount > 0 && (
+              <button
+                onClick={() => setBulkDeleteYear(yearFilter)}
+                className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                ลบทั้งปี {yearFilter} ({bulkDeleteCount} คน)
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {tab === "teachers" ? (
@@ -404,6 +488,24 @@ export default function UserManager({ teachers: initTeachers, students: initStud
           />
         ) : null;
       })()}
+
+      {bulkDeleteYear && (
+        <BulkDeleteModal
+          year={bulkDeleteYear}
+          role={tab === "teachers" ? "teacher" : "student"}
+          count={bulkDeleteCount}
+          onClose={() => setBulkDeleteYear(null)}
+          onDeleted={() => {
+            if (tab === "teachers") {
+              setTeachers((prev) => prev.filter((t) => t.academic_year !== bulkDeleteYear));
+            } else {
+              setStudents((prev) => prev.filter((s) => s.class_year !== bulkDeleteYear));
+            }
+            setBulkDeleteYear(null);
+            setYearFilter("__all__");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
+import MicrosoftLinkButton from "@/components/MicrosoftLinkButton";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -17,6 +18,11 @@ export default async function SettingsPage() {
   if (!profile) redirect("/login");
 
   const email = user.email ?? "";
+
+  // Check if user has already linked a Microsoft (Azure) identity
+  const isMicrosoftLinked = (user.identities ?? []).some(
+    (identity) => identity.provider === "azure"
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -62,6 +68,12 @@ export default async function SettingsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Microsoft 365 linking */}
+        <div className="card mb-6">
+          <h2 className="text-sm font-bold text-base-black/50 uppercase tracking-wide mb-4">เชื่อมต่อบัญชี</h2>
+          <MicrosoftLinkButton isLinked={isMicrosoftLinked} />
         </div>
 
         {/* Change password */}
