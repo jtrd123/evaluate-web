@@ -441,8 +441,14 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
       ) : (
         // All years — grouped
         sortedYears.length === 0 ? (
-          <div className="card flex flex-col items-center py-12 text-center">
-            <p className="text-sm text-base-black/40">ยังไม่มีการจับคู่</p>
+          <div className="card flex flex-col items-center py-16 text-center">
+            <div className="text-5xl mb-4">👥</div>
+            <p className="font-bold text-primary text-base mb-1">ยังไม่มีการจับคู่ครู-นักเรียน</p>
+            <p className="text-sm text-base-black/50 mb-5">จับคู่เพื่อให้นักเรียนสามารถประเมินครูได้</p>
+            <div className="flex flex-col gap-2 text-xs text-base-black/40">
+              <span>✅ ต้องมีครูและนักเรียนในระบบก่อน</span>
+              <span>✅ ต้องมีแบบฟอร์มและรอบประเมินก่อน</span>
+            </div>
           </div>
         ) : (
           <div className="space-y-5">

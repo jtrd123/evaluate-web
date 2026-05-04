@@ -2,6 +2,7 @@
 
 import { useState, useId } from "react";
 import * as XLSX from "xlsx";
+import { translateError } from "@/lib/errors";
 
 interface ParsedStudent {
   rowNum: number;
@@ -60,7 +61,6 @@ const ACTIVE_STATUSES = ["กำลังศึกษา"];
 
 type Step = 1 | 2 | 3;
 type InputTab = "form" | "file";
-type ImportMode = "all" | "new_only" | "update_class";
 
 // ─── Template download — matches school's actual format ──────────────────────
 function downloadTemplate() {
@@ -160,7 +160,7 @@ export default function StudentImportWizard() {
   const fileInputId = useId();
 
   const [step, setStep]                   = useState<Step>(1);
-  const [mode, setMode]                   = useState<ImportMode>("all");
+  const [skipExisting, setSkipExisting]   = useState(false);
   const [inputTab, setInputTab]           = useState<InputTab>("file");
   const [fileName, setFileName]           = useState("");
   const [parseError, setParseError]       = useState<string | null>(null);
@@ -246,8 +246,7 @@ export default function StudentImportWizard() {
         body: JSON.stringify({
           type: "students",
           rows: batch,
-          skipExisting: mode === "new_only",
-          updateExisting: mode === "update_class",
+          skipExisting,
         }),
       });
 
@@ -269,127 +268,119 @@ export default function StudentImportWizard() {
   function resetToStep1() {
     setStep(1); setRows([]); setFileName(""); setResult(null);
     setManual(EMPTY_MANUAL); setManualError(null); setParseError(null);
+    setSkipExisting(false);
   }
 
   // ── Step 1 ──────────────────────────────────────────────────────────────────
   if (step === 1) {
     return (
       <div className="space-y-6">
-        {/* Mode selector */}
-        <div className="grid grid-cols-2 gap-4">
-          {([
-            { id: "all" as const, icon: "📥", title: "Import ทั้งหมด", desc: "นำเข้านักเรียนทุกคนในไฟล์ (เริ่มต้นภาคเรียนใหม่)" },
-            { id: "new_only" as const, icon: "➕", title: "เพิ่มรายชื่อใหม่", desc: "ข้ามอีเมลที่มีบัญชีอยู่แล้ว เหมาะสำหรับนักเรียนโอนย้ายเข้ากลางภาค" },
-            { id: "update_class" as const, icon: "🏫", title: "อัปเดทห้องเรียน", desc: "อัปเดท class_id ให้นักเรียนที่มีบัญชีอยู่แล้ว เหมาะเมื่อเปลี่ยนห้องหรือเพิ่งเพิ่ม column ใหม่" },
-          ] as const).map((opt) => (
-            <button key={opt.id} onClick={() => setMode(opt.id)}
-              className={`text-left p-4 rounded-2xl border-2 transition-all ${
-                mode === opt.id ? "border-primary bg-primary/4" : "border-gray-200 hover:border-gray-300"
-              }`}
-            >
-              <div className="text-2xl mb-2">{opt.icon}</div>
-              <p className="font-bold text-sm text-base-black">{opt.title}</p>
-              <p className="text-xs text-base-black/50 mt-1">{opt.desc}</p>
-            </button>
-          ))}
-        </div>
+        {/* File upload area */}
+        <FileUploadArea fileInputId={fileInputId} parseError={parseError} onFile={handleFile} />
 
-        {/* Input area */}
-        {mode === "new_only" || mode === "update_class" ? (
-          <div>
-            <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-5">
-              {([
-                { id: "form" as const, label: "📝 กรอกแบบฟอร์ม" },
-                { id: "file" as const, label: "📁 อัปโหลดไฟล์" },
-              ] as const).map((t) => (
-                <button key={t.id}
-                  onClick={() => { setInputTab(t.id); setParseError(null); setManualError(null); }}
-                  className={`flex-1 py-2.5 text-sm font-semibold transition-all ${
-                    inputTab === t.id ? "bg-primary text-white" : "bg-white text-base-black/60 hover:bg-gray-50"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+        {/* Skip existing checkbox */}
+        <label className="flex items-center gap-3 cursor-pointer select-none px-1">
+          <input
+            type="checkbox"
+            checked={skipExisting}
+            onChange={(e) => setSkipExisting(e.target.checked)}
+            className="w-4 h-4 accent-primary rounded"
+          />
+          <span className="text-sm text-base-black/70">
+            ข้ามถ้ามีบัญชีอยู่แล้ว (ไม่อัปเดตข้อมูล)
+          </span>
+        </label>
 
-            {inputTab === "form" ? (
-              <form onSubmit={handleManualSubmit} className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-base-black/60 mb-1">คำนำหน้า</label>
-                    <select value={manual.prefix} onChange={(e) => setManual((p) => ({ ...p, prefix: e.target.value }))}
-                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
-                      {["เด็กชาย","เด็กหญิง","นาย","นางสาว","นาง"].map((v) => <option key={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-base-black/60 mb-1">ชื่อ <span className="text-red-400">*</span></label>
-                    <input type="text" value={manual.first_name} onChange={(e) => setManual((p) => ({ ...p, first_name: e.target.value }))}
-                      placeholder="สมชาย"
-                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-base-black/60 mb-1">นามสกุล <span className="text-red-400">*</span></label>
-                    <input type="text" value={manual.last_name} onChange={(e) => setManual((p) => ({ ...p, last_name: e.target.value }))}
-                      placeholder="ใจดี"
-                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                  </div>
-                </div>
+        {/* Manual form (single student) */}
+        <div>
+          <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-5">
+            {([
+              { id: "file" as const, label: "📁 อัปโหลดไฟล์" },
+              { id: "form" as const, label: "📝 เพิ่มรายชื่อเดี่ยว" },
+            ] as const).map((t) => (
+              <button key={t.id}
+                onClick={() => { setInputTab(t.id); setParseError(null); setManualError(null); }}
+                className={`flex-1 py-2.5 text-sm font-semibold transition-all ${
+                  inputTab === t.id ? "bg-primary text-white" : "bg-white text-base-black/60 hover:bg-gray-50"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-base-black/60 mb-1">
-                      รหัสนักศึกษา <span className="text-red-400">*</span>
-                    </label>
-                    <input type="text" value={manual.student_number} onChange={(e) => setManual((p) => ({ ...p, student_number: e.target.value }))}
-                      placeholder="10001"
-                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                    {manual.student_number && (
-                      <p className="text-xs text-base-black/40 mt-1 font-mono">→ username: {manual.student_number}@sukhon.ac.th</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-base-black/60 mb-1">
-                      รหัสบัตรประชาชน <span className="text-red-400">*</span>
-                    </label>
-                    <input type="text" value={manual.national_id} onChange={(e) => setManual((p) => ({ ...p, national_id: e.target.value }))}
-                      placeholder="1234567890123"
-                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                    {manual.national_id && (
-                      <p className="text-xs text-base-black/40 mt-1 font-mono">→ รหัสผ่าน: Skdw{manual.national_id}</p>
-                    )}
-                  </div>
-                </div>
-
+          {inputTab === "form" && (
+            <form onSubmit={handleManualSubmit} className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-base-black/60 mb-1">ชั้น/ห้อง</label>
-                  <input type="text" value={manual.class_name} onChange={(e) => setManual((p) => ({ ...p, class_name: e.target.value }))}
-                    placeholder="ม.1/1"
+                  <label className="block text-xs font-semibold text-base-black/60 mb-1">คำนำหน้า</label>
+                  <select value={manual.prefix} onChange={(e) => setManual((p) => ({ ...p, prefix: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
+                    {["เด็กชาย","เด็กหญิง","นาย","นางสาว","นาง"].map((v) => <option key={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-base-black/60 mb-1">ชื่อ <span className="text-red-400">*</span></label>
+                  <input type="text" value={manual.first_name} onChange={(e) => setManual((p) => ({ ...p, first_name: e.target.value }))}
+                    placeholder="สมชาย"
                     className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-base-black/60 mb-1">นามสกุล <span className="text-red-400">*</span></label>
+                  <input type="text" value={manual.last_name} onChange={(e) => setManual((p) => ({ ...p, last_name: e.target.value }))}
+                    placeholder="ใจดี"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                </div>
+              </div>
 
-                {manualError && (
-                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-                    <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                    </svg>
-                    {manualError}
-                  </div>
-                )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-base-black/60 mb-1">
+                    รหัสนักศึกษา <span className="text-red-400">*</span>
+                  </label>
+                  <input type="text" value={manual.student_number} onChange={(e) => setManual((p) => ({ ...p, student_number: e.target.value }))}
+                    placeholder="10001"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  {manual.student_number && (
+                    <p className="text-xs text-base-black/40 mt-1 font-mono">→ username: {manual.student_number}@sukhon.ac.th</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-base-black/60 mb-1">
+                    รหัสบัตรประชาชน <span className="text-red-400">*</span>
+                  </label>
+                  <input type="text" value={manual.national_id} onChange={(e) => setManual((p) => ({ ...p, national_id: e.target.value }))}
+                    placeholder="1234567890123"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  {manual.national_id && (
+                    <p className="text-xs text-base-black/40 mt-1 font-mono">→ รหัสผ่าน: Skdw{manual.national_id}</p>
+                  )}
+                </div>
+              </div>
 
-                <button type="submit"
-                  className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all">
-                  ตรวจสอบข้อมูลก่อน import →
-                </button>
-              </form>
-            ) : (
-              <FileUploadArea fileInputId={fileInputId} parseError={parseError} onFile={handleFile} />
-            )}
-          </div>
-        ) : (
-          <FileUploadArea fileInputId={fileInputId} parseError={parseError} onFile={handleFile} />
-        )}
+              <div>
+                <label className="block text-xs font-semibold text-base-black/60 mb-1">ชั้น/ห้อง</label>
+                <input type="text" value={manual.class_name} onChange={(e) => setManual((p) => ({ ...p, class_name: e.target.value }))}
+                  placeholder="ม.1/1"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+              </div>
+
+              {manualError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+                  <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                  </svg>
+                  {manualError}
+                </div>
+              )}
+
+              <button type="submit"
+                className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all">
+                ตรวจสอบข้อมูลก่อน import →
+              </button>
+            </form>
+          )}
+        </div>
 
         {/* Column reference */}
         <div className="bg-gray-50 rounded-2xl p-4">
@@ -435,16 +426,14 @@ export default function StudentImportWizard() {
         </div>
 
         <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-semibold ${
-          mode === "new_only" ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-blue-50 border-blue-200 text-blue-700"
+          skipExisting ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-blue-50 border-blue-200 text-blue-700"
         }`}>
           <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
           </svg>
-          {mode === "new_only"
-            ? "โหมด: เพิ่มรายชื่อใหม่ — email ที่มีบัญชีอยู่แล้วจะถูกข้ามอัตโนมัติ"
-            : mode === "update_class"
-            ? "โหมด: อัปเดทห้องเรียน — นักเรียนที่มีบัญชีอยู่แล้วจะถูกอัปเดท class_id ให้ตรงกับไฟล์"
-            : "โหมด: Import ทั้งหมด — ถ้ามี email ซ้ำจะแสดงเป็น error"}
+          {skipExisting
+            ? "โหมด: ข้ามถ้ามีบัญชีอยู่แล้ว — email ที่มีบัญชีอยู่แล้วจะถูกข้ามอัตโนมัติ"
+            : "โหมด: Upsert — นำเข้าและอัปเดทข้อมูลนักเรียนที่มีอยู่โดยอัตโนมัติ"}
         </div>
 
         {missingClass > 0 && (
@@ -564,7 +553,7 @@ export default function StudentImportWizard() {
             {result.errors.map((err, i) => (
               <div key={i} className="flex items-start gap-2 text-xs text-red-700">
                 <span className="font-mono shrink-0">แถว {err.row}:</span>
-                <span>{err.message}</span>
+                <span>{translateError(err.message)}</span>
               </div>
             ))}
           </div>

@@ -2,6 +2,7 @@
 
 import { useState, useId } from "react";
 import * as XLSX from "xlsx";
+import { translateError } from "@/lib/errors";
 
 interface ParsedTeacher {
   rowNum: number;
@@ -434,7 +435,7 @@ export default function TeacherImportWizard() {
             {result.errors.map((e, i) => (
               <div key={i} className="flex items-start gap-2 text-xs text-red-700">
                 <span className="font-mono shrink-0">แถว {e.row}:</span>
-                <span>{e.message}</span>
+                <span>{translateError(e.message)}</span>
               </div>
             ))}
           </div>

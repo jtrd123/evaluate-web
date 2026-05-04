@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/utils";
+import { translateError } from "@/lib/errors";
 
 interface Period {
   id: string;
@@ -72,7 +73,7 @@ export default function PeriodManager({ formId, formAcademicYear, initialPeriods
     }
 
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(translateError(err.message)); return; }
     if (!data) { setError("ไม่มีข้อมูลที่บันทึก"); return; }
     setPeriods((prev) => [data as Period, ...prev]);
     setForm({ title: "", academic_year: formAcademicYear ?? "", start_at: "", end_at: "" });
@@ -84,7 +85,7 @@ export default function PeriodManager({ formId, formAcademicYear, initialPeriods
     const { error: err } = await supabase.from("evaluation_periods").delete().eq("id", id);
     setDeletingId(null);
     setConfirmDeleteId(null);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(translateError(err.message)); return; }
     setPeriods((prev) => prev.filter((p) => p.id !== id));
   }
 

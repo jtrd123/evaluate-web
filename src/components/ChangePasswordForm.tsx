@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { translateError } from "@/lib/errors";
 
 export default function ChangePasswordForm() {
   const [current, setCurrent] = useState("");
@@ -23,7 +24,7 @@ export default function ChangePasswordForm() {
     });
     const data = await res.json();
     setSaving(false);
-    if (!res.ok) { setError(data.error); return; }
+    if (!res.ok) { setError(translateError(data.error ?? "")); return; }
     setSuccess(true);
     setCurrent(""); setNext(""); setConfirm("");
   }
