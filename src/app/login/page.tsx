@@ -1,14 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Button from "@/components/ui/Button";
 
-export default function LoginPage() {
+function getUrlError(code: string | null): string | null {
+  if (code === "not_registered")
+    return "บัญชี Microsoft นี้ไม่ได้ลงทะเบียนในระบบ กรุณาติดต่อผู้ดูแลระบบ";
+  if (code === "auth_callback_failed")
+    return "การเชื่อมต่อล้มเหลว กรุณาลองใหม่";
+  return null;
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const urlErrorMsg = getUrlError(searchParams.get("error"));
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(urlErrorMsg);
 
   const supabase = createClient();
 
@@ -87,10 +99,33 @@ export default function LoginPage() {
         <div className="card">
           <h2 className="text-lg font-bold text-primary mb-6">เข้าสู่ระบบ</h2>
 
+          {/* Microsoft login — primary for staff */}
+          <button
+            type="button"
+            onClick={handleMicrosoftLogin}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-[#0078d4]/30 bg-[#0078d4]/5 hover:bg-[#0078d4]/10 hover:border-[#0078d4]/50 transition-all text-sm font-bold text-[#0078d4] disabled:opacity-50 mb-5"
+          >
+            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+            </svg>
+            เข้าสู่ระบบด้วย Microsoft 365
+          </button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-base-black/30 font-medium">หรือใช้รหัสผ่าน</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div>
               <label className="block text-sm font-semibold text-base-black/70 mb-1.5">
-                อีเมล
+                อีเมล / รหัสประจำตัว
               </label>
               <input
                 type="text"
@@ -119,7 +154,10 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm flex items-start gap-2">
+                <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
                 {error}
               </div>
             )}
@@ -128,30 +166,6 @@ export default function LoginPage() {
               เข้าสู่ระบบ
             </Button>
           </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-base-black/30 font-medium">หรือ</span>
-            <div className="flex-1 h-px bg-gray-100" />
-          </div>
-
-          {/* Microsoft login */}
-          <button
-            type="button"
-            onClick={handleMicrosoftLogin}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all text-sm font-semibold text-base-black/80 disabled:opacity-50"
-          >
-            {/* Microsoft logo */}
-            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-            </svg>
-            เข้าสู่ระบบด้วย Microsoft 365
-          </button>
         </div>
 
         {/* Login hint */}
@@ -165,5 +179,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
