@@ -109,15 +109,31 @@ export async function POST(req: NextRequest) {
       user_metadata: { role: type === "students" ? "student" : "teacher" },
     });
 
-    // ── Helper: resolve class_id from class_name ─────────────────────────────
+    // ── Helper: resolve class_id — auto-create if not found ─────────────────
     async function resolveClassId(className: string | undefined, academicYear: string | undefined): Promise<string | null> {
       if (!className?.trim()) return null;
-      const cacheKey = `${className.trim()}|${academicYear?.trim() ?? ""}`;
+      const year = academicYear?.trim() || "2567";
+      const cacheKey = `${className.trim()}|${year}`;
       if (!classCache.has(cacheKey)) {
-        const query = supa.from("classes").select("id").eq("name", className.trim());
-        if (academicYear?.trim()) query.eq("academic_year", academicYear.trim());
-        const { data: cls } = await query.maybeSingle();
-        classCache.set(cacheKey, cls?.id ?? null);
+        // Try to find existing class
+        const { data: cls } = await supa
+          .from("classes")
+          .select("id")
+          .eq("name", className.trim())
+          .eq("academic_year", year)
+          .maybeSingle();
+
+        if (cls) {
+          classCache.set(cacheKey, cls.id);
+        } else {
+          // Auto-create the class
+          const { data: newCls } = await supa
+            .from("classes")
+            .insert({ name: className.trim(), academic_year: year })
+            .select("id")
+            .single();
+          classCache.set(cacheKey, newCls?.id ?? null);
+        }
       }
       return classCache.get(cacheKey) ?? null;
     }
