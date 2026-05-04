@@ -72,6 +72,12 @@ type TabId = (typeof TABS)[number]["id"];
 export default function ReportsDashboard({ assignments, submissions, responses, questions, profiles, classes }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("completion");
   const [yearFilter, setYearFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+
+  // ── Pre-compute maps first (needed for filters below) ───────────────────
+  const profileMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
+  const classMap = useMemo(() => new Map(classes.map((c) => [c.id, c])), [classes]);
+  const questionMap = useMemo(() => new Map(questions.map((q) => [q.id, q])), [questions]);
 
   // ── All available years (from classes) ───────────────────────────────────
   const allYears = useMemo(() => {
@@ -79,14 +85,28 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
     return Array.from(s).sort((a, b) => b.localeCompare(a));
   }, [classes]);
 
-  // ── Filter by year ────────────────────────────────────────────────────────
+  // ── All available subjects (from teacher profiles) ────────────────────────
+  const allSubjects = useMemo(() => {
+    const s = new Set(
+      profiles.filter((p) => p.role === "teacher" && p.subject).map((p) => p.subject!)
+    );
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "th"));
+  }, [profiles]);
+
+  // ── Filter by year + subject ──────────────────────────────────────────────
   const filteredAssignments = useMemo(() => {
-    if (!yearFilter) return assignments;
     return assignments.filter((a) => {
-      const cls = a.class_id ? classes.find((c) => c.id === a.class_id) : null;
-      return cls?.academic_year === yearFilter;
+      if (yearFilter) {
+        const cls = a.class_id ? classMap.get(a.class_id) : null;
+        if (cls?.academic_year !== yearFilter) return false;
+      }
+      if (subjectFilter) {
+        const teacher = profileMap.get(a.teacher_id);
+        if (teacher?.subject !== subjectFilter) return false;
+      }
+      return true;
     });
-  }, [assignments, classes, yearFilter]);
+  }, [assignments, classMap, profileMap, yearFilter, subjectFilter]);
 
   const filteredAssignmentIds = useMemo(
     () => new Set(filteredAssignments.map((a) => a.id)),
@@ -108,10 +128,6 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
     [responses, filteredSubmissionIds]
   );
 
-  // ── Pre-compute all report data ──────────────────────────────────────────
-  const profileMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
-  const classMap = useMemo(() => new Map(classes.map((c) => [c.id, c])), [classes]);
-  const questionMap = useMemo(() => new Map(questions.map((q) => [q.id, q])), [questions]);
   const submissionMap = useMemo(() => new Map(filteredSubmissions.map((s) => [s.id, s])), [filteredSubmissions]);
 
   // ── 1. Completion by class ───────────────────────────────────────────────
@@ -315,6 +331,25 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
             <option value="">ทั้งหมด</option>
             {allYears.map((y) => (
               <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {allSubjects.length > 0 && (
+        <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm w-fit">
+          <svg className="w-4 h-4 text-primary/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+          </svg>
+          <label className="text-xs font-semibold text-base-black/50 shrink-0">กลุ่มสาระ</label>
+          <select
+            value={subjectFilter}
+            onChange={(e) => setSubjectFilter(e.target.value)}
+            className="text-sm font-semibold text-primary bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[160px]"
+          >
+            <option value="">ทั้งหมด</option>
+            {allSubjects.map((s) => (
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </div>

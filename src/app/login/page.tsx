@@ -17,8 +17,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
+    // Allow short username (T0001 or 10001) — auto-append @sukhon.ac.th
+    const raw = email.trim().toLowerCase();
+    const fullEmail = raw.includes("@") ? raw : `${raw}@sukhon.ac.th`;
+
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: fullEmail,
       password,
     });
 
@@ -78,7 +82,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                placeholder="your@school.ac.th"
+                placeholder="T0001 หรือ T0001@sukhon.ac.th"
                 className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-base-black placeholder:text-base-black/30 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
               />
             </div>
@@ -110,12 +114,13 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Student login hint */}
-        <div className="mt-4 text-center">
+        {/* Login hint */}
+        <div className="mt-4 text-center space-y-1">
           <p className="text-xs text-base-black/40 leading-relaxed">
-            นักเรียน: ใช้ <span className="font-mono text-primary/70">รหัสนักศึกษา@sukhon.ac.th</span>
-            <br />
-            รหัสผ่าน: <span className="font-mono text-primary/70">Skdw + เลขบัตรประชาชน</span>
+            ครู: <span className="font-mono text-primary/70">T0001</span> / นักเรียน: <span className="font-mono text-primary/70">10001</span>
+          </p>
+          <p className="text-xs text-base-black/30">
+            รหัสผ่าน: <span className="font-mono">Skdw + เลขบัตรประชาชน</span>
           </p>
         </div>
       </div>
