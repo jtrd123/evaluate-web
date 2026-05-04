@@ -12,6 +12,22 @@ export default function LoginPage() {
 
   const supabase = createClient();
 
+  async function handleMicrosoftLogin() {
+    setLoading(true);
+    setError(null);
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "azure",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: "email profile openid",
+      },
+    });
+    if (oauthError) {
+      setError("ไม่สามารถเชื่อมต่อ Microsoft ได้ กรุณาลองใหม่");
+      setLoading(false);
+    }
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -112,6 +128,30 @@ export default function LoginPage() {
               เข้าสู่ระบบ
             </Button>
           </form>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-base-black/30 font-medium">หรือ</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+
+          {/* Microsoft login */}
+          <button
+            type="button"
+            onClick={handleMicrosoftLogin}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all text-sm font-semibold text-base-black/80 disabled:opacity-50"
+          >
+            {/* Microsoft logo */}
+            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+            </svg>
+            เข้าสู่ระบบด้วย Microsoft 365
+          </button>
         </div>
 
         {/* Login hint */}
