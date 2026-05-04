@@ -20,6 +20,22 @@ interface ImportResult {
   errors: { row: number; message: string }[];
 }
 
+// ─── Download credentials Excel ──────────────────────────────────────────────
+function downloadCredentials(students: ParsedStudent[]) {
+  const headers = ["ชื่อ-นามสกุล", "ชั้น/ห้อง", "Username (Email)", "รหัสผ่าน"];
+  const data = students.map((s) => [
+    s.full_name,
+    s.class_name || "—",
+    s.email,
+    s.password || "password123",
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+  ws["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 30 }, { wch: 20 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "ข้อมูล Login");
+  XLSX.writeFile(wb, "student_credentials.xlsx");
+}
+
 interface ManualForm {
   prefix: string;
   first_name: string;
@@ -168,6 +184,7 @@ export default function StudentImportWizard() {
   const [skippedInactive, setSkippedInactive] = useState(0);
   const [importing, setImporting]         = useState(false);
   const [result, setResult]               = useState<ImportResult | null>(null);
+  const [importedRows, setImportedRows]   = useState<ParsedStudent[]>([]);
   const [manual, setManual]               = useState<ManualForm>(EMPTY_MANUAL);
   const [manualError, setManualError]     = useState<string | null>(null);
 
@@ -261,12 +278,13 @@ export default function StudentImportWizard() {
     }
 
     setResult(combined);
+    setImportedRows(rows);
     setImporting(false);
     setStep(3);
   }
 
   function resetToStep1() {
-    setStep(1); setRows([]); setFileName(""); setResult(null);
+    setStep(1); setRows([]); setFileName(""); setResult(null); setImportedRows([]);
     setManual(EMPTY_MANUAL); setManualError(null); setParseError(null);
     setSkipExisting(false);
   }
@@ -557,6 +575,37 @@ export default function StudentImportWizard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Credentials info */}
+      {result.success > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <svg className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+            </svg>
+            <div className="text-sm text-blue-800">
+              <p className="font-bold mb-1">ข้อมูล Login ของนักเรียน</p>
+              <p className="text-blue-700 text-xs leading-relaxed">
+                <span className="font-semibold">Username:</span> รหัสนักศึกษา@sukhon.ac.th
+                <br />
+                <span className="font-semibold">รหัสผ่าน:</span> Skdw + เลขบัตรประชาชน 13 หลัก
+                <br />
+                <span className="text-blue-500">เช่น รหัสนักศึกษา 10001 → </span>
+                <span className="font-mono">10001@sukhon.ac.th</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => downloadCredentials(importedRows)}
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            ดาวน์โหลดข้อมูล Login (Excel)
+          </button>
         </div>
       )}
 

@@ -110,14 +110,13 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Dev test accounts */}
-        <div className="mt-4 card bg-primary/5 border border-primary/10 !p-4">
-          <p className="text-xs font-semibold text-primary/60 mb-2">บัญชีทดสอบ (Development)</p>
-          <div className="flex flex-col gap-1 text-xs text-base-black/50 font-mono">
-            <span>admin@school.ac.th — password123</span>
-            <span>teacher1@school.ac.th — password123</span>
-            <span>student1@school.ac.th — password123</span>
-          </div>
+        {/* Student login hint */}
+        <div className="mt-4 text-center">
+          <p className="text-xs text-base-black/40 leading-relaxed">
+            นักเรียน: ใช้ <span className="font-mono text-primary/70">รหัสนักศึกษา@sukhon.ac.th</span>
+            <br />
+            รหัสผ่าน: <span className="font-mono text-primary/70">Skdw + เลขบัตรประชาชน</span>
+          </p>
         </div>
       </div>
     </div>
