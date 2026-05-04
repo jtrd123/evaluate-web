@@ -1,11 +1,13 @@
 "use client";
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import type { ClassCompletion } from "./ReportsDashboard";
+import { useState } from "react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import type { ClassCompletion, StudentProgress } from "./ReportsDashboard";
 
 interface Props {
   overall: { total: number; done: number; pct: number };
   byClass: ClassCompletion[];
+  studentProgress: StudentProgress[];
 }
 
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
@@ -18,11 +20,20 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
   );
 }
 
-export default function CompletionReport({ overall, byClass }: Props) {
+export default function CompletionReport({ overall, byClass, studentProgress }: Props) {
+  const [showPending, setShowPending] = useState(false);
+  const [classFilter, setClassFilter] = useState("__all__");
+
   const pieData = [
     { name: "ส่งแล้ว", value: overall.done, color: "#2e006b" },
     { name: "ยังไม่ส่ง", value: overall.total - overall.done, color: "#ffd445" },
   ];
+
+  const pendingStudents = studentProgress.filter((s) => s.completed < s.total);
+  const allClasses = Array.from(new Set(studentProgress.map((s) => s.className).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, "th"));
+
+  const filteredStudents = (showPending ? pendingStudents : studentProgress)
+    .filter((s) => classFilter === "__all__" || s.className === classFilter);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -42,25 +53,12 @@ export default function CompletionReport({ overall, byClass }: Props) {
             <div className="relative">
               <ResponsiveContainer width={220} height={220}>
                 <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={95}
-                    paddingAngle={3}
-                    dataKey="value"
-                    startAngle={90}
-                    endAngle={-270}
-                  >
-                    {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} dataKey="value" startAngle={90} endAngle={-270}>
+                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => [`${v} ราย`, ""]} />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Center label */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-3xl font-black text-primary">{overall.pct}%</span>
                 <span className="text-xs text-base-black/40">สำเร็จ</span>
@@ -77,13 +75,12 @@ export default function CompletionReport({ overall, byClass }: Props) {
           </div>
         </div>
 
-        {/* By class drill-down */}
+        {/* By class */}
         <div className="card">
           <h3 className="font-bold text-primary mb-4">
             แยกตามชั้นเรียน
             <span className="ml-2 text-xs font-normal text-base-black/40">(เรียงจากน้อย→มาก)</span>
           </h3>
-
           {byClass.length === 0 ? (
             <p className="text-sm text-base-black/40 text-center py-8">ยังไม่มีข้อมูล</p>
           ) : (
@@ -97,10 +94,8 @@ export default function CompletionReport({ overall, byClass }: Props) {
                     </span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${c.pct >= 80 ? "bg-green-500" : c.pct >= 50 ? "bg-amber-400" : "bg-red-400"}`}
-                      style={{ width: `${c.pct}%` }}
-                    />
+                    <div className={`h-full rounded-full transition-all ${c.pct >= 80 ? "bg-green-500" : c.pct >= 50 ? "bg-amber-400" : "bg-red-400"}`}
+                      style={{ width: `${c.pct}%` }} />
                   </div>
                 </div>
               ))}
@@ -127,6 +122,94 @@ export default function CompletionReport({ overall, byClass }: Props) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Student progress table */}
+      {studentProgress.length > 0 && (
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-bold text-primary">รายชื่อนักเรียน</h3>
+              <p className="text-xs text-base-black/40 mt-0.5">
+                {pendingStudents.length > 0
+                  ? `ยังไม่ส่งครบ ${pendingStudents.length} คน`
+                  : "นักเรียนทุกคนส่งครบแล้ว ✓"}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {allClasses.length > 1 && (
+                <select
+                  value={classFilter}
+                  onChange={(e) => setClassFilter(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                >
+                  <option value="__all__">ทุกห้อง</option>
+                  {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+              <div className="flex bg-gray-100 rounded-xl p-0.5">
+                <button
+                  onClick={() => setShowPending(false)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${!showPending ? "bg-white text-primary shadow-sm" : "text-base-black/50"}`}
+                >
+                  ทั้งหมด ({studentProgress.length})
+                </button>
+                <button
+                  onClick={() => setShowPending(true)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${showPending ? "bg-white text-red-600 shadow-sm" : "text-base-black/50"}`}
+                >
+                  ยังไม่ส่ง ({pendingStudents.length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {filteredStudents.length === 0 ? (
+            <p className="text-sm text-base-black/40 text-center py-8">
+              {showPending ? "นักเรียนทุกคนส่งครบแล้ว 🎉" : "ไม่มีข้อมูล"}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left pb-3 text-xs font-semibold text-base-black/40 uppercase pr-4">ชื่อ-นามสกุล</th>
+                    <th className="text-left pb-3 text-xs font-semibold text-base-black/40 uppercase pr-4">รหัส</th>
+                    <th className="text-left pb-3 text-xs font-semibold text-base-black/40 uppercase pr-4">ห้อง</th>
+                    <th className="text-center pb-3 text-xs font-semibold text-base-black/40 uppercase pr-4">ส่งแล้ว</th>
+                    <th className="text-left pb-3 text-xs font-semibold text-base-black/40 uppercase">สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filteredStudents.map((s) => {
+                    const isDone = s.completed === s.total;
+                    return (
+                      <tr key={s.studentId} className="hover:bg-gray-50/80">
+                        <td className="py-2.5 pr-4 font-medium text-base-black">{s.studentName}</td>
+                        <td className="py-2.5 pr-4 text-xs text-base-black/40 font-mono">{s.studentNumber ?? "—"}</td>
+                        <td className="py-2.5 pr-4">
+                          {s.className
+                            ? <span className="text-xs bg-primary/8 text-primary px-2 py-0.5 rounded-full">{s.className}</span>
+                            : <span className="text-xs text-base-black/30">—</span>}
+                        </td>
+                        <td className="py-2.5 pr-4 text-center text-xs text-base-black/60 font-mono">{s.completed}/{s.total}</td>
+                        <td className="py-2.5">
+                          {isDone ? (
+                            <span className="text-xs bg-green-100 text-green-700 font-semibold px-2.5 py-1 rounded-full">ครบแล้ว</span>
+                          ) : (
+                            <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-2.5 py-1 rounded-full">
+                              ขาด {s.total - s.completed} รายการ
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

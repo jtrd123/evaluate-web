@@ -24,6 +24,16 @@ export interface ClassCompletion {
   pct: number;
 }
 
+export interface StudentProgress {
+  studentId: string;
+  studentName: string;
+  studentNumber: string | null;
+  className: string | null;
+  classId: string | null;
+  total: number;
+  completed: number;
+}
+
 export interface QuestionAvg {
   questionId: string;
   questionText: string;
@@ -130,6 +140,12 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
 
   const submissionMap = useMemo(() => new Map(filteredSubmissions.map((s) => [s.id, s])), [filteredSubmissions]);
 
+  // Map assignment_id → submission for quick lookup
+  const assignmentSubmissionMap = useMemo(
+    () => new Map(filteredSubmissions.map((s) => [s.assignment_id, s])),
+    [filteredSubmissions]
+  );
+
   // ── 1. Completion by class ───────────────────────────────────────────────
   const completionByClass = useMemo<ClassCompletion[]>(() => {
     const buckets = new Map<string, ClassCompletion>();
@@ -148,20 +164,53 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
       }
       const b = buckets.get(key)!;
       b.total++;
-      const sub = filteredSubmissions.find((s) => s.assignment_id === a.id);
+      const sub = assignmentSubmissionMap.get(a.id);
       if (sub?.is_submitted) b.completed++;
     }
 
     return Array.from(buckets.values())
       .map((b) => ({ ...b, pct: b.total > 0 ? Math.round((b.completed / b.total) * 100) : 0 }))
       .sort((a, b) => a.pct - b.pct);
-  }, [filteredAssignments, filteredSubmissions, classMap]);
+  }, [filteredAssignments, assignmentSubmissionMap, classMap]);
 
   const overallCompletion = useMemo(() => {
     const total = filteredAssignments.length;
     const done = filteredSubmissions.length;
     return { total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
   }, [filteredAssignments, filteredSubmissions]);
+
+  // ── 1b. Student-level progress ───────────────────────────────────────────
+  const studentProgress = useMemo<StudentProgress[]>(() => {
+    const studentMap = new Map<string, { total: number; completed: number; classId: string | null }>();
+
+    for (const a of filteredAssignments) {
+      const cur = studentMap.get(a.student_id) ?? { total: 0, completed: 0, classId: a.class_id };
+      cur.total++;
+      const sub = assignmentSubmissionMap.get(a.id);
+      if (sub?.is_submitted) cur.completed++;
+      studentMap.set(a.student_id, cur);
+    }
+
+    return Array.from(studentMap.entries())
+      .map(([studentId, data]) => {
+        const profile = profileMap.get(studentId);
+        const cls = data.classId ? classMap.get(data.classId) : null;
+        return {
+          studentId,
+          studentName: profile?.full_name ?? "—",
+          studentNumber: profile?.student_number ?? null,
+          className: cls ? `${cls.name} (${cls.academic_year})` : null,
+          classId: data.classId,
+          total: data.total,
+          completed: data.completed,
+        };
+      })
+      .sort((a, b) => {
+        const cmp = (a.className ?? "").localeCompare(b.className ?? "", "th");
+        if (cmp !== 0) return cmp;
+        return a.studentName.localeCompare(b.studentName, "th");
+      });
+  }, [filteredAssignments, assignmentSubmissionMap, profileMap, classMap]);
 
   // ── 2. Question averages (all teachers combined) ─────────────────────────
   const questionAverages = useMemo<QuestionAvg[]>(() => {
@@ -301,13 +350,50 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(compRows), "ความคืบหน้า");
 
-    // Sheet 3: Question averages
+    // Sheet 3: Student-level progress
+    const studentRows = studentProgress.map((s) => ({
+      "ชื่อ-นามสกุล": s.studentName,
+      "รหัสนักเรียน": s.studentNumber ?? "",
+      "ห้องเรียน": s.className ?? "",
+      "ประเมินแล้ว": s.completed,
+      "ทั้งหมด": s.total,
+      "สถานะ": s.completed === s.total ? "ครบแล้ว" : `ยังขาด ${s.total - s.completed} รายการ`,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentRows), "รายชื่อนักเรียน");
+
+    // Sheet 4: Pending students only
+    const pendingRows = studentProgress
+      .filter((s) => s.completed < s.total)
+      .map((s) => ({
+        "ชื่อ-นามสกุล": s.studentName,
+        "รหัสนักเรียน": s.studentNumber ?? "",
+        "ห้องเรียน": s.className ?? "",
+        "ยังไม่ส่ง": s.total - s.completed,
+        "ส่งแล้ว": s.completed,
+        "ทั้งหมด": s.total,
+      }));
+    if (pendingRows.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pendingRows), "นักเรียนยังไม่ส่ง");
+    }
+
+    // Sheet 5: Question averages
     const qRows = questionAverages.map((q) => ({
       "คำถาม": q.questionText,
       "คะแนนเฉลี่ย": q.average,
       "จำนวนคำตอบ": q.count,
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(qRows), "วิเคราะห์คะแนน");
+
+    // Sheet 6: Comments
+    const commentRows = comments.map((c) => ({
+      "ครู": c.teacherName,
+      "กลุ่มสาระ": c.teacherSubject ?? "",
+      "ห้องเรียน": c.className ?? "",
+      "ความคิดเห็น": c.text,
+    }));
+    if (commentRows.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(commentRows), "ข้อเสนอแนะ");
+    }
 
     const label = yearFilter ? `_${yearFilter}` : "";
     XLSX.writeFile(wb, `รายงานประเมินครู${label}.xlsx`);
@@ -391,6 +477,7 @@ export default function ReportsDashboard({ assignments, submissions, responses, 
         <CompletionReport
           overall={overallCompletion}
           byClass={completionByClass}
+          studentProgress={studentProgress}
         />
       )}
       {activeTab === "questions" && (
