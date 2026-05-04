@@ -3,7 +3,7 @@ import AssignmentManager from "@/components/admin/AssignmentManager";
 import ClassAssignmentPanel from "@/components/admin/ClassAssignmentPanel";
 import YearSelector from "@/components/admin/YearSelector";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function AssignmentsPage({
   searchParams,

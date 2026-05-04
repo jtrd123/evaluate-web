@@ -48,7 +48,11 @@ const COLUMN_MAP: Record<string, string> = {
   "password": "password",
   "รหัสนักศึกษา": "student_number",
   "รหัสบัตรประชาชน": "national_id",
+  // Combined format (legacy)
   "ชั้น/ห้อง": "class_name",
+  // Split format (new)
+  "ชั้น": "grade",
+  "ห้อง": "room",
   "สถานะ": "status",
 };
 
@@ -56,25 +60,26 @@ const ACTIVE_STATUSES = ["กำลังศึกษา"];
 
 type Step = 1 | 2 | 3;
 type InputTab = "form" | "file";
+type ImportMode = "all" | "new_only" | "update_class";
 
 // ─── Template download — matches school's actual format ──────────────────────
 function downloadTemplate() {
   const headers = [
-    "ลำดับ", "ชั้น/ห้อง", "เลขที่", "สถานะ",
+    "ลำดับ", "ชั้น", "ห้อง", "เลขที่", "สถานะ",
     "รหัสบัตรประชาชน", "รหัสนักศึกษา", "เพศ",
     "คำนำหน้า", "ชื่อ", "นามสกุล", "ชื่อเล่น",
     "วัน/เดือน/ปีเกิด", "Email", "Password",
   ];
   const sample = [
-    "1", "ม.1/1", "1", "กำลังศึกษา",
+    "1", "ม.4", "3", "1", "กำลังศึกษา",
     "1234567890123", "10001", "ชาย",
     "นาย", "สมชาย", "ใจดี", "ชาย",
     "01/01/2550",
-    `=IF(F2<>"",F2&"@sukhon.ac.th","")`,   // Username: no leading 0
-    `=IF(E2<>"","Skdw"&E2,"")`,
+    `=IF(G2<>"",G2&"@sukhon.ac.th","")`,
+    `=IF(F2<>"","Skdw"&F2,"")`,
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
-  ws["!cols"] = headers.map(() => ({ wch: 20 }));
+  ws["!cols"] = headers.map(() => ({ wch: 18 }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "ข้อมูลนักเรียนทั้งหมด");
   XLSX.writeFile(wb, "student_import_template.xlsx");
@@ -114,7 +119,10 @@ function parseWorkbook(wb: XLSX.WorkBook): { students: ParsedStudent[]; inactive
     const last         = getVal(row, "last_name");
     const studentNum   = getVal(row, "student_number");
     const nationalId   = getVal(row, "national_id");
-    const className    = getVal(row, "class_name");
+    // Support both combined "ชั้น/ห้อง" and separate "ชั้น" + "ห้อง" columns
+    const grade        = getVal(row, "grade");
+    const room         = getVal(row, "room");
+    const className    = getVal(row, "class_name") || (grade && room ? `${grade}/${room}` : grade || room);
 
     // Email (username): read from column, or derive as {studentNum}@sukhon.ac.th
     let email = getVal(row, "email");
@@ -152,7 +160,7 @@ export default function StudentImportWizard() {
   const fileInputId = useId();
 
   const [step, setStep]                   = useState<Step>(1);
-  const [mode, setMode]                   = useState<"all" | "new_only">("all");
+  const [mode, setMode]                   = useState<ImportMode>("all");
   const [inputTab, setInputTab]           = useState<InputTab>("file");
   const [fileName, setFileName]           = useState("");
   const [parseError, setParseError]       = useState<string | null>(null);
@@ -235,7 +243,12 @@ export default function StudentImportWizard() {
       const res = await fetch("/api/admin/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "students", rows: batch, skipExisting: mode === "new_only" }),
+        body: JSON.stringify({
+          type: "students",
+          rows: batch,
+          skipExisting: mode === "new_only",
+          updateExisting: mode === "update_class",
+        }),
       });
 
       if (!res.ok) {
@@ -267,6 +280,7 @@ export default function StudentImportWizard() {
           {([
             { id: "all" as const, icon: "📥", title: "Import ทั้งหมด", desc: "นำเข้านักเรียนทุกคนในไฟล์ (เริ่มต้นภาคเรียนใหม่)" },
             { id: "new_only" as const, icon: "➕", title: "เพิ่มรายชื่อใหม่", desc: "ข้ามอีเมลที่มีบัญชีอยู่แล้ว เหมาะสำหรับนักเรียนโอนย้ายเข้ากลางภาค" },
+            { id: "update_class" as const, icon: "🏫", title: "อัปเดทห้องเรียน", desc: "อัปเดท class_id ให้นักเรียนที่มีบัญชีอยู่แล้ว เหมาะเมื่อเปลี่ยนห้องหรือเพิ่งเพิ่ม column ใหม่" },
           ] as const).map((opt) => (
             <button key={opt.id} onClick={() => setMode(opt.id)}
               className={`text-left p-4 rounded-2xl border-2 transition-all ${
@@ -281,7 +295,7 @@ export default function StudentImportWizard() {
         </div>
 
         {/* Input area */}
-        {mode === "new_only" ? (
+        {mode === "new_only" || mode === "update_class" ? (
           <div>
             <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-5">
               {([
@@ -385,7 +399,7 @@ export default function StudentImportWizard() {
               ["คำนำหน้า + ชื่อ + นามสกุล", "ชื่อเต็ม"],
               ["รหัสนักศึกษา", "Username → รหัส@sukhon.ac.th"],
               ["รหัสบัตรประชาชน", "Password → Skdw + เลขบัตร"],
-              ["ชั้น/ห้อง", "ห้องเรียน"],
+              ["ชั้น + ห้อง", "รวมเป็น ม.4/3 (หรือใช้ ชั้น/ห้อง แบบเดิมก็ได้)"],
               ["สถานะ", "กรอง เฉพาะ 'กำลังศึกษา'"],
             ].map(([col, desc]) => (
               <div key={col} className="flex items-center gap-2 text-xs">
@@ -428,6 +442,8 @@ export default function StudentImportWizard() {
           </svg>
           {mode === "new_only"
             ? "โหมด: เพิ่มรายชื่อใหม่ — email ที่มีบัญชีอยู่แล้วจะถูกข้ามอัตโนมัติ"
+            : mode === "update_class"
+            ? "โหมด: อัปเดทห้องเรียน — นักเรียนที่มีบัญชีอยู่แล้วจะถูกอัปเดท class_id ให้ตรงกับไฟล์"
             : "โหมด: Import ทั้งหมด — ถ้ามี email ซ้ำจะแสดงเป็น error"}
         </div>
 

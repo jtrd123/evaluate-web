@@ -3,7 +3,7 @@ import Link from "next/link";
 import CreateFormButton from "@/components/admin/CreateFormButton";
 import { formatDate } from "@/lib/utils";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 function FormWindowBadge({ startAt, endAt }: { startAt: string | null; endAt: string | null }) {
   const now = new Date();

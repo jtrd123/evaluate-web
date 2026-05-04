@@ -7,7 +7,7 @@ import FormSettings from "@/components/admin/FormSettings";
 import PeriodManager from "@/components/admin/PeriodManager";
 import DeleteFormButton from "@/components/admin/DeleteFormButton";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function FormDetailPage({ params }: { params: Promise<{ formId: string }> }) {
   const { formId } = await params;

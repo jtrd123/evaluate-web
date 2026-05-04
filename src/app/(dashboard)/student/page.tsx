@@ -5,7 +5,7 @@ import TeacherEvalCard from "@/components/student/TeacherEvalCard";
 import YearSelector from "@/components/admin/YearSelector";
 import type { AssignmentWithTeacher } from "@/lib/types/database.types";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function StudentDashboard({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
   const { year } = await searchParams;

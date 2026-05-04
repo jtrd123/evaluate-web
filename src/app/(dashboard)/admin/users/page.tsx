@@ -3,7 +3,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import UserManager from "@/components/admin/UserManager";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 function adminSupa() {
   return createAdminClient(

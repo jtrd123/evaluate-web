@@ -55,9 +55,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json() as {
     type: "students" | "teachers" | "classes";
     rows: ImportRow[];
-    skipExisting?: boolean;   // true = skip if email already exists (add-new mode)
+    skipExisting?: boolean;      // true = skip if email already exists (add-new mode)
+    updateExisting?: boolean;    // true = update class_id for existing accounts
   };
-  const { type, rows, skipExisting = false } = body;
+  const { type, rows, skipExisting = false, updateExisting = false } = body;
 
   if (!type || !Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -108,9 +109,69 @@ export async function POST(req: NextRequest) {
       user_metadata: { role: type === "students" ? "student" : "teacher" },
     });
 
+    // ── Helper: resolve class_id from class_name ─────────────────────────────
+    async function resolveClassId(className: string | undefined, academicYear: string | undefined): Promise<string | null> {
+      if (!className?.trim()) return null;
+      const cacheKey = `${className.trim()}|${academicYear?.trim() ?? ""}`;
+      if (!classCache.has(cacheKey)) {
+        const query = supa.from("classes").select("id").eq("name", className.trim());
+        if (academicYear?.trim()) query.eq("academic_year", academicYear.trim());
+        const { data: cls } = await query.maybeSingle();
+        classCache.set(cacheKey, cls?.id ?? null);
+      }
+      return classCache.get(cacheKey) ?? null;
+    }
+
     if (authErr) {
       const alreadyExists = authErr.message.toLowerCase().includes("already") ||
                             authErr.message.includes("unique");
+
+      if (alreadyExists && updateExisting && type === "students") {
+        // Find existing auth user by email
+        const { data: users } = await supa.auth.admin.listUsers({ perPage: 1000 });
+        const existing = users?.users?.find((u) => u.email === email);
+        if (existing) {
+          const classId = await resolveClassId(r.class_name, r.academic_year);
+          // Check if profile exists
+          const { data: existingProfile } = await supa
+            .from("profiles")
+            .select("id")
+            .eq("id", existing.id)
+            .maybeSingle();
+
+          if (existingProfile) {
+            // Update existing profile
+            const { error: upErr } = await supa
+              .from("profiles")
+              .update({ class_id: classId })
+              .eq("id", existing.id);
+            if (upErr) {
+              result.errors.push({ row: i + 1, message: upErr.message });
+            } else {
+              result.success++;
+            }
+          } else {
+            // Profile missing — create it now
+            const { error: insErr } = await supa.from("profiles").insert({
+              id: existing.id,
+              full_name: r.full_name.trim(),
+              role: "student",
+              school_id: "SCH001",
+              student_number: r.student_number?.trim() ?? null,
+              class_id: classId,
+            });
+            if (insErr) {
+              result.errors.push({ row: i + 1, message: insErr.message });
+            } else {
+              result.success++;
+            }
+          }
+        } else {
+          result.skipped++;
+        }
+        continue;
+      }
+
       if (alreadyExists && skipExisting) {
         result.skipped++;
         continue;
@@ -127,15 +188,8 @@ export async function POST(req: NextRequest) {
 
     // 2. Look up class_id (students only) — use cache
     let classId: string | null = null;
-    if (type === "students" && r.class_name?.trim()) {
-      const cacheKey = `${r.class_name.trim()}|${r.academic_year?.trim() ?? ""}`;
-      if (!classCache.has(cacheKey)) {
-        const query = supa.from("classes").select("id").eq("name", r.class_name.trim());
-        if (r.academic_year?.trim()) query.eq("academic_year", r.academic_year.trim());
-        const { data: cls } = await query.maybeSingle();
-        classCache.set(cacheKey, cls?.id ?? null);
-      }
-      classId = classCache.get(cacheKey) ?? null;
+    if (type === "students") {
+      classId = await resolveClassId(r.class_name, r.academic_year);
     }
 
     // 3. Insert profile

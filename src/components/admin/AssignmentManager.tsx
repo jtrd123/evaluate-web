@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface Teacher { id: string; full_name: string; employee_id: string | null; subject: string | null; }
 interface Student { id: string; full_name: string; student_number: string | null; class_id?: string | null; }
+
+function deriveGrade(className: string): string {
+  const m = className.match(/^(ม\.\d+)/);
+  return m ? m[1] : className;
+}
 interface Form { id: string; title: string; }
 interface Period { id: string; title: string; end_at: string; academic_year?: string | null; }
 interface Class { id: string; name: string; academic_year: string; }
@@ -49,14 +54,42 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
     class_id: "",
   });
 
-  // Bulk mode: one teacher → many students
+  // Bulk mode: one teacher → many students (with grade filter)
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkStudentIds, setBulkStudentIds] = useState<string[]>([]);
+  const [gradeFilter, setGradeFilter] = useState("");
+
+  const classMap = useMemo(() => new Map(classes.map((c) => [c.id, c])), [classes]);
+
+  const grades = useMemo(() => {
+    const seen = new Set<string>();
+    for (const c of classes) seen.add(deriveGrade(c.name));
+    return Array.from(seen).sort((a, b) => a.localeCompare(b, "th"));
+  }, [classes]);
+
+  const visibleStudents = useMemo(() => {
+    if (!gradeFilter) return students;
+    return students.filter((s) => {
+      const cls = s.class_id ? classMap.get(s.class_id) : null;
+      return cls && deriveGrade(cls.name) === gradeFilter;
+    });
+  }, [students, gradeFilter, classMap]);
 
   function toggleBulkStudent(id: string) {
     setBulkStudentIds((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
+  }
+
+  function selectGrade(grade: string) {
+    setGradeFilter(grade);
+    const ids = students
+      .filter((s) => {
+        const cls = s.class_id ? classMap.get(s.class_id) : null;
+        return cls && deriveGrade(cls.name) === grade;
+      })
+      .map((s) => s.id);
+    setBulkStudentIds(ids);
   }
 
   async function handleAdd() {
@@ -70,12 +103,14 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
     setSaving(true);
     setError(null);
 
+    const studentMap = new Map(students.map((s) => [s.id, s]));
     const rows = ids.map((sid) => ({
       student_id: sid,
       teacher_id,
       form_id,
       period_id,
-      class_id: sel.class_id || null,
+      // In bulk mode use each student's own class; single mode uses manually selected class
+      class_id: bulkMode ? (studentMap.get(sid)?.class_id ?? null) : (sel.class_id || null),
     }));
 
     const { error: err } = await supabase.from("teacher_assignments").insert(rows);
@@ -92,6 +127,7 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
 
     setShowAdd(false);
     setBulkStudentIds([]);
+    setGradeFilter("");
     setSel({ student_id: "", teacher_id: "", form_id: "", period_id: "", class_id: "" });
     router.refresh();
     const { data } = await supabase
@@ -218,7 +254,7 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
             <h3 className="font-bold text-primary">เพิ่มการจับคู่ใหม่</h3>
             <label className="flex items-center gap-2 cursor-pointer">
               <div
-                onClick={() => { setBulkMode((p) => !p); setBulkStudentIds([]); }}
+                onClick={() => { setBulkMode((p) => !p); setBulkStudentIds([]); setGradeFilter(""); }}
                 className={`w-10 h-5 rounded-full transition-colors ${bulkMode ? "bg-primary" : "bg-gray-300"} relative`}
               >
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${bulkMode ? "translate-x-5" : ""}`} />
@@ -253,23 +289,100 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
                 </select>
               </div>
             ) : (
-              <div>
+              <div className="sm:col-span-2">
+                {/* Grade quick-select bar */}
+                {grades.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => { setGradeFilter(""); setBulkStudentIds([]); }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${!gradeFilter ? "bg-primary text-white" : "bg-gray-100 text-base-black/60 hover:bg-gray-200"}`}
+                    >
+                      ทั้งหมด
+                    </button>
+                    {grades.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => selectGrade(g)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${gradeFilter === g ? "bg-primary text-white" : "bg-gray-100 text-base-black/60 hover:bg-gray-200"}`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <label className="block text-xs font-semibold text-base-black/60 mb-1">
-                  นักเรียน * <span className="text-primary">({bulkStudentIds.length} คนที่เลือก)</span>
+                  นักเรียน *{" "}
+                  <span className="text-primary">({bulkStudentIds.length} คนที่เลือก)</span>
+                  {visibleStudents.length > 0 && bulkStudentIds.length < visibleStudents.length && (
+                    <button
+                      type="button"
+                      onClick={() => setBulkStudentIds(visibleStudents.map((s) => s.id))}
+                      className="ml-2 text-primary/70 underline hover:text-primary"
+                    >
+                      เลือกทั้งหมด {visibleStudents.length} คน
+                    </button>
+                  )}
                 </label>
-                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-44 overflow-y-auto bg-base-white">
-                  {students.map((s) => (
-                    <label key={s.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={bulkStudentIds.includes(s.id)}
-                        onChange={() => toggleBulkStudent(s.id)}
-                        className="accent-primary"
-                      />
-                      <span className="text-sm">{s.full_name}</span>
-                      {s.student_number && <span className="text-xs text-base-black/40 font-mono">{s.student_number}</span>}
-                    </label>
-                  ))}
+
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto bg-base-white">
+                  {(() => {
+                    // Group visible students by class
+                    const byClass = new Map<string, Student[]>();
+                    for (const s of visibleStudents) {
+                      const key = s.class_id ?? "__none__";
+                      if (!byClass.has(key)) byClass.set(key, []);
+                      byClass.get(key)!.push(s);
+                    }
+                    const classKeys = Array.from(byClass.keys()).sort((a, b) => {
+                      const na = a !== "__none__" ? (classMap.get(a)?.name ?? a) : "zzz";
+                      const nb = b !== "__none__" ? (classMap.get(b)?.name ?? b) : "zzz";
+                      return na.localeCompare(nb, "th");
+                    });
+                    return classKeys.map((key) => {
+                      const cls = key !== "__none__" ? classMap.get(key) : null;
+                      const studs = byClass.get(key)!;
+                      return (
+                        <div key={key}>
+                          {(classKeys.length > 1 || !gradeFilter) && (
+                            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100 sticky top-0">
+                              <span className="text-[11px] font-bold text-primary/70">{cls?.name ?? "ไม่ระบุห้อง"}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const ids = studs.map((s) => s.id);
+                                  const allChecked = ids.every((id) => bulkStudentIds.includes(id));
+                                  setBulkStudentIds((prev) =>
+                                    allChecked ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])]
+                                  );
+                                }}
+                                className="text-[11px] text-primary underline"
+                              >
+                                {studs.every((s) => bulkStudentIds.includes(s.id)) ? "ยกเลิกทั้งห้อง" : `เลือกทั้งห้อง (${studs.length})`}
+                              </button>
+                            </div>
+                          )}
+                          {studs.map((s) => (
+                            <label key={s.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                              <input
+                                type="checkbox"
+                                checked={bulkStudentIds.includes(s.id)}
+                                onChange={() => toggleBulkStudent(s.id)}
+                                className="accent-primary"
+                              />
+                              <span className="text-sm flex-1">{s.full_name}</span>
+                              {s.student_number && <span className="text-xs text-base-black/40 font-mono">{s.student_number}</span>}
+                            </label>
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
+                  {visibleStudents.length === 0 && (
+                    <div className="px-3 py-6 text-center text-xs text-base-black/40">ไม่มีนักเรียนในชั้นนี้</div>
+                  )}
                 </div>
               </div>
             )}
@@ -290,15 +403,17 @@ export default function AssignmentManager({ teachers, students, forms, periods, 
               </select>
             </div>
 
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-base-black/60 mb-1">ชั้นเรียน (ไม่บังคับ)</label>
-              <select value={sel.class_id} onChange={(e) => setSel((p) => ({ ...p, class_id: e.target.value }))} className={selectCls}>
-                <option value="">-- ไม่ระบุ --</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>
-                ))}
-              </select>
-            </div>
+            {!bulkMode && (
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-base-black/60 mb-1">ชั้นเรียน (ไม่บังคับ)</label>
+                <select value={sel.class_id} onChange={(e) => setSel((p) => ({ ...p, class_id: e.target.value }))} className={selectCls}>
+                  <option value="">-- ไม่ระบุ --</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-600 mb-3">{error}</p>}

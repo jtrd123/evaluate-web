@@ -6,7 +6,7 @@ import TeacherResultsChart from "@/components/teacher/TeacherResultsChart";
 import YearSelector from "@/components/admin/YearSelector";
 import type { TeacherResult, QuestionStat } from "@/lib/types/database.types";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function TeacherDashboard({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
   const { year } = await searchParams;
