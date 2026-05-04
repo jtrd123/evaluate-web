@@ -4,12 +4,17 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import TeacherResultsChart from "@/components/teacher/TeacherResultsChart";
 import YearSelector from "@/components/admin/YearSelector";
+import ClassSelector from "@/components/teacher/ClassSelector";
 import type { TeacherResult, QuestionStat } from "@/lib/types/database.types";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeacherDashboard({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
-  const { year } = await searchParams;
+export default async function TeacherDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; classId?: string }>;
+}) {
+  const { year, classId } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -22,7 +27,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
 
   if (!profile || profile.role !== "teacher") redirect("/login");
 
-  // Get all available years from periods this teacher has results in
+  // ── Periods for year filter ──────────────────────────────────────────────
   const { data: allPeriods } = await supabase
     .from("evaluation_periods")
     .select("id, academic_year")
@@ -31,30 +36,88 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const allYears = Array.from(new Set((allPeriods ?? []).map((p) => p.academic_year as string)))
     .sort((a, b) => b.localeCompare(a));
 
-  // Filter period IDs by year if selected
   let periodIds: string[] | null = null;
   if (year && allPeriods) {
     periodIds = allPeriods.filter((p) => p.academic_year === year).map((p) => p.id);
   }
 
-  // Fetch results, filtered by period if year selected
-  let resultsQuery = supabase
-    .from("teacher_evaluation_results")
-    .select("*")
+  // ── All assignments for this teacher ────────────────────────────────────
+  const { data: assignmentsRaw } = await supabase
+    .from("teacher_assignments")
+    .select("id, class_id, period_id, form_id")
     .eq("teacher_id", user.id);
 
+  // Build class list for selector
+  const rawClassIds = [...new Set((assignmentsRaw ?? []).map((a) => a.class_id).filter(Boolean) as string[])];
+  let teacherClasses: Array<{ id: string; name: string; academic_year: string }> = [];
+  if (rawClassIds.length > 0) {
+    const { data: classData } = await supabase
+      .from("classes")
+      .select("id, name, academic_year")
+      .in("id", rawClassIds)
+      .order("name");
+    teacherClasses = classData ?? [];
+  }
+
+  // ── Apply year + class filters ───────────────────────────────────────────
+  let filteredAssignments = assignmentsRaw ?? [];
+  if (classId) {
+    filteredAssignments = filteredAssignments.filter((a) => a.class_id === classId);
+  }
   if (periodIds !== null) {
-    if (periodIds.length === 0) {
-      // No periods for this year → no results
-      resultsQuery = resultsQuery.eq("period_id", "00000000-0000-0000-0000-000000000000");
-    } else {
-      resultsQuery = resultsQuery.in("period_id", periodIds);
+    filteredAssignments = periodIds.length === 0
+      ? []
+      : filteredAssignments.filter((a) => periodIds!.includes(a.period_id ?? ""));
+  }
+  const filteredAssignmentIds = filteredAssignments.map((a) => a.id);
+
+  // ── Fetch responses for filtered assignments ──────────────────────────────
+  let typedResults: TeacherResult[] = [];
+
+  if (filteredAssignmentIds.length > 0) {
+    const { data: subsData } = await supabase
+      .from("evaluation_submissions")
+      .select("id, submitted_at")
+      .in("assignment_id", filteredAssignmentIds)
+      .eq("is_submitted", true);
+
+    const subIds = (subsData ?? []).map((s) => s.id);
+
+    if (subIds.length > 0) {
+      const formIds = [...new Set(filteredAssignments.map((a) => a.form_id).filter(Boolean) as string[])];
+      const [{ data: responsesData }, { data: questionsData }] = await Promise.all([
+        supabase.from("evaluation_responses")
+          .select("submission_id, question_id, rating_value, text_value")
+          .in("submission_id", subIds),
+        supabase.from("evaluation_questions")
+          .select("id, question_text, question_type, order_index")
+          .in("form_id", formIds)
+          .order("order_index"),
+      ]);
+
+      const questionMap = new Map((questionsData ?? []).map((q) => [q.id, q]));
+      const submissionMap = new Map((subsData ?? []).map((s) => [s.id, s]));
+
+      typedResults = ((responsesData ?? []).map((r) => {
+        const q = questionMap.get(r.question_id);
+        const sub = submissionMap.get(r.submission_id);
+        if (!q) return null;
+        return {
+          question_id: r.question_id,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          order_index: q.order_index,
+          rating_value: r.rating_value,
+          text_value: r.text_value,
+          teacher_id: user.id,
+          submitted_at: sub?.submitted_at ?? "",
+          period_id: "",
+        } as TeacherResult;
+      }).filter(Boolean)) as TeacherResult[];
     }
   }
 
-  const { data: results } = await resultsQuery;
-  const typedResults = (results ?? []) as TeacherResult[];
-
+  // ── Aggregate stats ──────────────────────────────────────────────────────
   const statsMap = new Map<string, QuestionStat>();
   for (const r of typedResults) {
     if (!statsMap.has(r.question_id)) {
@@ -109,10 +172,8 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
               <p className="text-accent text-sm mt-0.5">{profile.subject}</p>
             </div>
             <div className="relative z-10 mt-4">
-              <Link
-                href="/teacher/report"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-base-white/15 hover:bg-base-white/25 text-base-white text-sm font-semibold transition-colors"
-              >
+              <Link href="/teacher/report"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-base-white/15 hover:bg-base-white/25 text-base-white text-sm font-semibold transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
                 </svg>
@@ -124,8 +185,16 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
 
         {/* Year filter */}
         {allYears.length > 0 && (
-          <div className="mb-6 animate-fade-in">
+          <div className="mb-4 animate-fade-in">
             <YearSelector years={allYears} currentYear={year ?? ""} basePath="/teacher" />
+          </div>
+        )}
+
+        {/* Class filter */}
+        {teacherClasses.length > 1 && (
+          <div className="mb-6 animate-fade-in">
+            <p className="text-xs font-semibold text-base-black/50 mb-2">กรองตามชั้น</p>
+            <ClassSelector classes={teacherClasses} currentClassId={classId ?? ""} />
           </div>
         )}
 
@@ -155,14 +224,12 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
           </section>
         )}
 
-        {/* Text comments (anonymous) */}
+        {/* Text comments */}
         {textComments.length > 0 && (
           <section className="animate-slide-up">
             <h2 className="text-base font-bold text-primary mb-4">
               ข้อเสนอแนะ
-              <span className="ml-2 text-xs font-normal text-base-black/40 bg-gray-100 px-2 py-0.5 rounded-full">
-                ไม่ระบุตัวตน
-              </span>
+              <span className="ml-2 text-xs font-normal text-base-black/40 bg-gray-100 px-2 py-0.5 rounded-full">ไม่ระบุตัวตน</span>
             </h2>
             <div className="flex flex-col gap-3">
               {textComments.map((comment, i) => (
@@ -187,7 +254,9 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
               </svg>
             </div>
             <h3 className="font-semibold text-primary text-base mb-1">ยังไม่มีผลประเมิน</h3>
-            <p className="text-base-black/50 text-sm">{year ? `ไม่มีข้อมูลในปีการศึกษา ${year}` : "รอให้นักเรียนส่งการประเมิน"}</p>
+            <p className="text-base-black/50 text-sm">
+              {year ? `ไม่มีข้อมูลในปีการศึกษา ${year}` : classId ? "ไม่มีข้อมูลสำหรับชั้นนี้" : "รอให้นักเรียนส่งการประเมิน"}
+            </p>
           </div>
         )}
       </main>

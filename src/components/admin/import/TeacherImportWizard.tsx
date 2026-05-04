@@ -115,6 +115,16 @@ function parseWorkbook(wb: XLSX.WorkBook): ParsedTeacher[] {
   return teachers;
 }
 
+function downloadTeacherCredentials(teachers: ParsedTeacher[]) {
+  const headers = ["ชื่อ-นามสกุล", "กลุ่มสาระ", "Username", "รหัสผ่าน"];
+  const data = teachers.map(t => [t.full_name, t.subject || "—", t.employee_id, t.password || "—"]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+  ws["!cols"] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 25 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "ข้อมูล Login ครู");
+  XLSX.writeFile(wb, "teacher_credentials.xlsx");
+}
+
 export default function TeacherImportWizard() {
   const fileInputId = useId();
 
@@ -125,6 +135,7 @@ export default function TeacherImportWizard() {
   const [rows, setRows]           = useState<ParsedTeacher[]>([]);
   const [importing, setImporting] = useState(false);
   const [result, setResult]       = useState<ImportResult | null>(null);
+  const [importedRows, setImportedRows] = useState<ParsedTeacher[]>([]);
 
   function handleFile(file: File) {
     setParseError(null);
@@ -182,12 +193,13 @@ export default function TeacherImportWizard() {
     }
 
     setResult(combined);
+    setImportedRows(rows);
     setImporting(false);
     setStep(3);
   }
 
   function reset() {
-    setStep(1); setRows([]); setFileName(""); setResult(null); setParseError(null);
+    setStep(1); setRows([]); setFileName(""); setResult(null); setParseError(null); setImportedRows([]);
   }
 
   // ── Step 1 ────────────────────────────────────────────────────────────────
@@ -439,6 +451,20 @@ export default function TeacherImportWizard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {result.success > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
+          <p className="text-sm font-bold text-blue-800">ข้อมูล Login ของครู</p>
+          <p className="text-xs text-blue-700">
+            Username: รหัสครูผู้สอน เช่น <span className="font-mono">T0001</span>
+            <br/>รหัสผ่าน: Skdw + เลขบัตรประชาชน
+          </p>
+          <button onClick={() => downloadTeacherCredentials(importedRows)}
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors">
+            ดาวน์โหลดข้อมูล Login ครู (Excel)
+          </button>
         </div>
       )}
 

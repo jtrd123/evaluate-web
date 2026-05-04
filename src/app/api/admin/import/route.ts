@@ -112,7 +112,8 @@ export async function POST(req: NextRequest) {
     // ── Helper: resolve class_id — auto-create if not found ─────────────────
     async function resolveClassId(className: string | undefined, academicYear: string | undefined): Promise<string | null> {
       if (!className?.trim()) return null;
-      const year = academicYear?.trim() || "2567";
+      const currentThaiYear = (new Date().getFullYear() + 543).toString();
+      const year = academicYear?.trim() || currentThaiYear;
       const cacheKey = `${className.trim()}|${year}`;
       if (!classCache.has(cacheKey)) {
         // Try to find existing class

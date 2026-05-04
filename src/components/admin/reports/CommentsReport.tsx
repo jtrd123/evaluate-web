@@ -10,14 +10,22 @@ interface Props {
   classes: RawClass[];
 }
 
+const DEFAULT_BLACKLIST = ["ไม่มี", "ดี", "-", "ไม่", "ไม่มีอะไร", "ไม่มีอะไรเพิ่มเติม", "ไม่มีความคิดเห็น", "ไม่มีเพิ่มเติม"];
+
 export default function CommentsReport({ comments, teachers, classes }: Props) {
   const [showStudentNames, setShowStudentNames] = useState(false);
   const [filterTeacher, setFilterTeacher] = useState("__all__");
   const [filterClass, setFilterClass] = useState("__all__");
   const [search, setSearch] = useState("");
+  const [blacklist, setBlacklist] = useState<string[]>(DEFAULT_BLACKLIST);
+  const [newWord, setNewWord] = useState("");
+  const [showBlacklist, setShowBlacklist] = useState(false);
 
   const filtered = useMemo(() => {
     return comments.filter((c) => {
+      const text = c.text.trim().toLowerCase();
+      if (blacklist.some(w => text === w.toLowerCase().trim())) return false;
+
       if (filterTeacher !== "__all__" && !teachers.find((t) => t.id === filterTeacher && t.full_name === c.teacherName)) {
         const t = teachers.find((t2) => t2.id === filterTeacher);
         if (t && t.full_name !== c.teacherName) return false;
@@ -29,9 +37,15 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
       if (search && !c.text.toLowerCase().includes(search.toLowerCase()) && !c.teacherName.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [comments, filterTeacher, filterClass, search, teachers, classes]);
+  }, [comments, filterTeacher, filterClass, search, teachers, classes, blacklist]);
 
-  // Teacher filter: keep only teachers who have comments
+  const blacklistHiddenCount = useMemo(() => {
+    return comments.filter(c => {
+      const text = c.text.trim().toLowerCase();
+      return blacklist.some(w => text === w.toLowerCase().trim());
+    }).length;
+  }, [comments, blacklist]);
+
   const teachersWithComments = useMemo(() => {
     const names = new Set(comments.map((c) => c.teacherName));
     return teachers.filter((t) => names.has(t.full_name));
@@ -42,12 +56,25 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
     return classes.filter((c) => [...names].some((n) => n?.includes(c.name)));
   }, [comments, classes]);
 
+  function addWord() {
+    const word = newWord.trim().toLowerCase();
+    if (!word || blacklist.some(w => w.toLowerCase() === word)) {
+      setNewWord("");
+      return;
+    }
+    setBlacklist(prev => [...prev, word]);
+    setNewWord("");
+  }
+
+  function removeWord(word: string) {
+    setBlacklist(prev => prev.filter(w => w !== word));
+  }
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       {/* Controls */}
       <div className="card">
         <div className="flex flex-wrap items-end gap-3">
-          {/* Teacher filter */}
           <div className="flex-1 min-w-40">
             <label className="block text-xs font-semibold text-base-black/50 mb-1.5">ครู</label>
             <select
@@ -62,7 +89,6 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
             </select>
           </div>
 
-          {/* Class filter */}
           <div className="flex-1 min-w-40">
             <label className="block text-xs font-semibold text-base-black/50 mb-1.5">ชั้นเรียน</label>
             <select
@@ -77,7 +103,6 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
             </select>
           </div>
 
-          {/* Keyword search */}
           <div className="flex-1 min-w-40">
             <label className="block text-xs font-semibold text-base-black/50 mb-1.5">ค้นหาคำ</label>
             <input
@@ -89,7 +114,6 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
             />
           </div>
 
-          {/* Show names toggle */}
           <div className="flex flex-col gap-1">
             <label className="block text-xs font-semibold text-base-black/50">แสดงชื่อนักเรียน</label>
             <button
@@ -120,6 +144,59 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
         </div>
       </div>
 
+      {/* Blacklist */}
+      <div className="card">
+        <button
+          onClick={() => setShowBlacklist(p => !p)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-base-black/70">ตัดคำที่ไม่ต้องการออก</span>
+            {blacklistHiddenCount > 0 && (
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">
+                ซ่อน {blacklistHiddenCount} รายการ
+              </span>
+            )}
+          </div>
+          <svg className={`w-4 h-4 text-base-black/40 transition-transform ${showBlacklist ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+
+        {showBlacklist && (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {blacklist.map(word => (
+                <span key={word} className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-1 rounded-full">
+                  {word}
+                  <button onClick={() => removeWord(word)} className="ml-0.5 hover:text-red-500 transition-colors">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newWord}
+                onChange={e => setNewWord(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addWord()}
+                placeholder="เพิ่มคำที่ต้องการตัดออก..."
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+              <button
+                onClick={addWord}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                เพิ่ม
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Comment cards */}
       {filtered.length === 0 ? (
         <div className="card flex flex-col items-center py-16 text-center">
@@ -133,7 +210,6 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
           {filtered.map((c, i) => (
             <div key={i} className="card hover:shadow-card-hover transition-shadow">
               <div className="flex items-start gap-3">
-                {/* Quote icon */}
                 <div className="w-8 h-8 bg-primary/8 rounded-xl flex items-center justify-center shrink-0">
                   <svg className="w-4 h-4 text-primary/60" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
@@ -144,7 +220,6 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
                   <p className="text-sm text-base-black leading-relaxed mb-3">{c.text}</p>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Teacher */}
                     <span className="inline-flex items-center gap-1.5 text-xs bg-primary/8 text-primary font-semibold px-2.5 py-1 rounded-full">
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -152,17 +227,14 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
                       {c.teacherName}
                     </span>
 
-                    {/* Subject */}
                     {c.teacherSubject && (
                       <span className="text-xs text-base-black/40">{c.teacherSubject}</span>
                     )}
 
-                    {/* Class */}
                     {c.className && (
                       <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">{c.className}</span>
                     )}
 
-                    {/* Student name (if toggle on) */}
                     {showStudentNames && c.studentName && (
                       <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 font-semibold px-2.5 py-1 rounded-full">
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -172,7 +244,6 @@ export default function CommentsReport({ comments, teachers, classes }: Props) {
                       </span>
                     )}
 
-                    {/* Date */}
                     <span className="text-xs text-base-black/30 ml-auto">{formatDate(c.submittedAt)}</span>
                   </div>
                 </div>
