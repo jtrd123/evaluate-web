@@ -27,6 +27,32 @@ function matchTeacher(filename: string, teachers: Teacher[]): Teacher | null {
   return byName ?? null;
 }
 
+// Compress image to max 200KB, resize to max 400x400px
+async function compressImage(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 400;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+        else { width = Math.round((width * MAX) / height); height = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(file);
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+      }, "image/jpeg", 0.8);
+    };
+    img.src = url;
+  });
+}
+
 export default function PhotoUpload({ teachers }: { teachers: Teacher[] }) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -77,8 +103,9 @@ export default function PhotoUpload({ teachers }: { teachers: Teacher[] }) {
       });
 
       try {
+        const compressed = await compressImage(entry.file);
         const formData = new FormData();
-        formData.append("file", entry.file);
+        formData.append("file", compressed);
         formData.append("teacher_id", entry.matched!.id);
 
         const res = await fetch("/api/admin/upload-photo", { method: "POST", body: formData });
