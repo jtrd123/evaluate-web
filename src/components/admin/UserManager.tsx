@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 interface ClassItem { id: string; name: string; academic_year: string; }
 
+type UserRole = "admin" | "teacher" | "student";
+
 interface Teacher {
   id: string;
   full_name: string;
@@ -12,6 +14,7 @@ interface Teacher {
   subject: string | null;
   teaching_levels: string | null;
   academic_year: string | null;
+  role: UserRole;
 }
 
 interface Student {
@@ -218,6 +221,79 @@ function EditStudentRow({ student, classes, onSave, onCancel }: {
   );
 }
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: "ผู้ดูแลระบบ",
+  teacher: "ครูผู้สอน",
+  student: "นักเรียน",
+};
+
+function ChangeRoleModal({ userId, userName, currentRole, onClose, onChanged }: {
+  userId: string; userName: string; currentRole: UserRole;
+  onClose: () => void; onChanged: (newRole: UserRole) => void;
+}) {
+  const [selected, setSelected] = useState<UserRole>(currentRole);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (selected === currentRole) { onClose(); return; }
+    setSaving(true); setError(null);
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: selected }),
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(data.error); return; }
+    onChanged(selected);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <h3 className="font-bold text-base-black mb-1">เปลี่ยนสิทธิ์ผู้ใช้งาน</h3>
+        <p className="text-sm text-base-black/50 mb-5">{userName}</p>
+
+        <div className="flex flex-col gap-2 mb-5">
+          {(["admin", "teacher", "student"] as UserRole[]).map((role) => (
+            <button
+              key={role}
+              onClick={() => setSelected(role)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                selected === role
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-gray-100 hover:border-gray-200 text-base-black/70"
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selected === role ? "border-primary" : "border-gray-300"}`}>
+                {selected === role && <div className="w-2 h-2 rounded-full bg-primary" />}
+              </div>
+              <div>
+                <p className="text-sm font-bold">{ROLE_LABELS[role]}</p>
+                {role === "admin" && <p className="text-xs text-base-black/40">เข้าถึงได้ทุกส่วนของระบบ</p>}
+                {role === "teacher" && <p className="text-xs text-base-black/40">ดูรายการและผลประเมินของตัวเอง</p>}
+                {role === "student" && <p className="text-xs text-base-black/40">ส่งแบบประเมินเท่านั้น</p>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50">
+            ยกเลิก
+          </button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-50">
+            {saving ? "กำลังบันทึก..." : "บันทึก"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
   year: string; role: "teacher" | "student"; count: number;
   onClose: () => void; onDeleted: () => void;
@@ -273,6 +349,7 @@ export default function UserManager({ teachers: initTeachers, students: initStud
   const [editingId, setEditingId] = useState<string | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [changeRoleId, setChangeRoleId] = useState<string | null>(null);
   const [bulkDeleteYear, setBulkDeleteYear] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [yearFilter, setYearFilter] = useState<string>("__all__");
@@ -393,9 +470,16 @@ export default function UserManager({ teachers: initTeachers, students: initStud
                       <td className="px-4 py-3 text-base-black/40 text-xs">{t.email}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          {t.role === "admin" && (
+                            <span className="text-xs bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full mr-1">Admin</span>
+                          )}
                           <button onClick={() => setEditingId(t.id)}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/8 transition-colors" title="แก้ไข">
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                          </button>
+                          <button onClick={() => setChangeRoleId(t.id)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors" title="เปลี่ยนสิทธิ์">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
                           </button>
                           <button onClick={() => setResetUserId(t.id)}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="รีเซ็ตรหัสผ่าน">
@@ -506,6 +590,22 @@ export default function UserManager({ teachers: initTeachers, students: initStud
           }}
         />
       )}
+
+      {changeRoleId && (() => {
+        const t = teachers.find((x) => x.id === changeRoleId);
+        return t ? (
+          <ChangeRoleModal
+            userId={changeRoleId}
+            userName={t.full_name}
+            currentRole={t.role}
+            onClose={() => setChangeRoleId(null)}
+            onChanged={(newRole) => {
+              setTeachers((prev) => prev.map((x) => x.id === changeRoleId ? { ...x, role: newRole } : x));
+              setChangeRoleId(null);
+            }}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

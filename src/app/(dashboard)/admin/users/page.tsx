@@ -29,8 +29,8 @@ export default async function UsersPage() {
 
   const [{ data: teachers }, { data: students }, { data: classes }] = await Promise.all([
     supa.from("profiles")
-      .select("id, full_name, employee_id, subject, teaching_levels, academic_year")
-      .eq("role", "teacher")
+      .select("id, full_name, employee_id, subject, teaching_levels, academic_year, role")
+      .in("role", ["teacher", "admin"])
       .order("full_name"),
     supa.from("profiles")
       .select("id, full_name, student_number, class_id, classes(name, academic_year)")
@@ -47,6 +47,7 @@ export default async function UsersPage() {
     subject: t.subject ?? null,
     teaching_levels: (t as Record<string, unknown>).teaching_levels as string | null ?? null,
     academic_year: (t as Record<string, unknown>).academic_year as string | null ?? null,
+    role: (t.role ?? "teacher") as "admin" | "teacher" | "student",
   }));
 
   const studentList = (students ?? []).map((s) => {
