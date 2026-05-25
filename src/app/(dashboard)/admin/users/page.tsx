@@ -1,6 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
 import UserManager from "@/components/admin/UserManager";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +12,6 @@ function adminSupa() {
 }
 
 export default async function UsersPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") redirect("/");
-
   const supa = adminSupa();
 
   // Fetch all auth users to get emails

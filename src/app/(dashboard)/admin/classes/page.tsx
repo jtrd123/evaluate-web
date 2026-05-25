@@ -1,16 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import ClassManager from "@/components/admin/ClassManager";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClassesPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") redirect("/");
 
   // Fetch classes with student count
   const { data: classes } = await supabase

@@ -1,14 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import PhotoUpload from "@/components/admin/PhotoUpload";
 export const dynamic = "force-dynamic";
 
 export default async function PhotosPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") redirect("/login");
 
   const { data: teachers } = await supabase.from("profiles").select("id, full_name, employee_id, avatar_url, subject").eq("role", "teacher").order("full_name");
 
