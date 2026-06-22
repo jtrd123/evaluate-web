@@ -12,6 +12,7 @@ interface ParsedTeacher {
   employee_id: string;
   teaching_levels: string;  // "ม.2, ม.3, ม.4"
   subject: string;          // กลุ่มสาระที่สอน
+  ms_email: string;         // จริง Microsoft 365 email
 }
 
 interface ImportResult {
@@ -33,6 +34,9 @@ const COLUMN_MAP: Record<string, string> = {
   "password":          "password",
   "ชั้นที่สอน":        "teaching_levels",
   "กลุ่มสาระที่สอน":   "subject",
+  "Email":             "ms_email",
+  "email":             "ms_email",
+  "อีเมล":             "ms_email",
 };
 
 type Step = 1 | 2 | 3;
@@ -99,6 +103,7 @@ function parseWorkbook(wb: XLSX.WorkBook): ParsedTeacher[] {
     const subject        = getVal(row, "subject");
 
     const full_name = [prefix, first, last].filter(Boolean).join(" ");
+    const ms_email  = getVal(row, "ms_email").toLowerCase();
     if (!email || !full_name) return;
 
     teachers.push({
@@ -109,6 +114,7 @@ function parseWorkbook(wb: XLSX.WorkBook): ParsedTeacher[] {
       employee_id:     employeeId,
       teaching_levels: teachingLevels,
       subject,
+      ms_email,
     });
   });
 
@@ -177,6 +183,7 @@ export default function TeacherImportWizard() {
         employee_id:     t.employee_id,
         teaching_levels: t.teaching_levels,
         subject:         t.subject,
+        ms_email:        t.ms_email || undefined,
       }));
 
       const res = await fetch("/api/admin/import", {

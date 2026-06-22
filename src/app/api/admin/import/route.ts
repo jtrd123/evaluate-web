@@ -32,13 +32,14 @@ function adminClient() {
 export interface ImportRow {
   full_name: string;
   email: string;
-  password?: string;          // use actual password from Excel when available
+  password?: string;
   student_number?: string;
   class_name?: string;
   academic_year?: string;
   employee_id?: string;
   subject?: string;
-  teaching_levels?: string;   // e.g. "ม.2, ม.3, ม.4"
+  teaching_levels?: string;
+  ms_email?: string;          // Microsoft 365 email (teachers)
   name?: string;              // for class imports
 }
 
@@ -169,6 +170,7 @@ export async function POST(req: NextRequest) {
             profilePayload.employee_id     = r.employee_id?.trim() ?? null;
             profilePayload.subject         = r.subject?.trim() ?? null;
             profilePayload.teaching_levels = r.teaching_levels?.trim() ?? null;
+            if (r.ms_email?.trim()) profilePayload.ms_email = r.ms_email.trim().toLowerCase();
           }
 
           const { error: upsertErr } = await supa
@@ -212,6 +214,7 @@ export async function POST(req: NextRequest) {
       profilePayload.employee_id     = r.employee_id?.trim() ?? null;
       profilePayload.subject         = r.subject?.trim() ?? null;
       profilePayload.teaching_levels = r.teaching_levels?.trim() ?? null;
+      if (r.ms_email?.trim()) profilePayload.ms_email = r.ms_email.trim().toLowerCase();
     }
 
     const { error: profileErr } = await supa.from("profiles").insert(profilePayload);

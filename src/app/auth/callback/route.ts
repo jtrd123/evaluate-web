@@ -38,25 +38,33 @@ export async function GET(request: Request) {
         }
 
         // No profile for this OAuth user — check if their email exists in system
-        // (i.e., this Microsoft account belongs to an imported teacher/student who hasn't linked yet)
         const supa = adminClient();
         const email = user.email ?? "";
 
         let emailExistsInSystem = false;
         if (email) {
-          // Look up by email in profiles (via auth.users)
+          // 1. Check auth.users email match (student/same-email case)
           const { data: existingUsers } = await supa.auth.admin.listUsers({ perPage: 1000 });
           const match = existingUsers?.users?.find(
             (u) => u.email === email && u.id !== user.id
           );
           if (match) {
-            // Check if this other user has a profile
             const { data: matchProfile } = await supa
               .from("profiles")
               .select("id")
               .eq("id", match.id)
               .single();
             if (matchProfile) emailExistsInSystem = true;
+          }
+
+          // 2. Check ms_email in profiles (teacher Microsoft email ≠ system email)
+          if (!emailExistsInSystem) {
+            const { data: msProfile } = await supa
+              .from("profiles")
+              .select("id")
+              .eq("ms_email", email.toLowerCase())
+              .maybeSingle();
+            if (msProfile) emailExistsInSystem = true;
           }
         }
 
