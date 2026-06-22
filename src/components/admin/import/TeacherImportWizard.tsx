@@ -96,14 +96,14 @@ function parseWorkbook(wb: XLSX.WorkBook): ParsedTeacher[] {
 
     if (!first && !last) return; // skip empty rows
 
-    // Username stored as employee_id@sukhon.ac.th
-    const email          = employeeId ? `${employeeId}@sukhon.ac.th` : "";
+    // ใช้ Email จาก Excel (Microsoft email) เป็น auth email โดยตรง
+    const excelEmail     = getVal(row, "ms_email").toLowerCase();
+    const email          = excelEmail || (employeeId ? `${employeeId}@sukhon.ac.th` : "");
     const password       = nationalId ? `Skdw${nationalId}` : (getVal(row, "password") || "");
     const teachingLevels = getVal(row, "teaching_levels");
     const subject        = getVal(row, "subject");
 
     const full_name = [prefix, first, last].filter(Boolean).join(" ");
-    const ms_email  = getVal(row, "ms_email").toLowerCase();
     if (!email || !full_name) return;
 
     teachers.push({
@@ -114,7 +114,7 @@ function parseWorkbook(wb: XLSX.WorkBook): ParsedTeacher[] {
       employee_id:     employeeId,
       teaching_levels: teachingLevels,
       subject,
-      ms_email,
+      ms_email:        excelEmail,
     });
   });
 

@@ -57,15 +57,6 @@ export async function GET(request: Request) {
             if (matchProfile) emailExistsInSystem = true;
           }
 
-          // 2. Check ms_email in profiles (teacher Microsoft email ≠ system email)
-          if (!emailExistsInSystem) {
-            const { data: msProfile } = await supa
-              .from("profiles")
-              .select("id")
-              .eq("ms_email", email.toLowerCase())
-              .maybeSingle();
-            if (msProfile) emailExistsInSystem = true;
-          }
         }
 
         // Delete the orphaned OAuth user
