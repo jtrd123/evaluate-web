@@ -149,11 +149,18 @@ export default function TeacherImportWizard() {
   function handleFile(file: File) {
     setParseError(null);
     setFileName(file.name);
+    const isCsv = file.name.toLowerCase().endsWith(".csv");
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const wb   = XLSX.read(data, { type: "array" });
+        let wb: XLSX.WorkBook;
+        if (isCsv) {
+          const text = e.target!.result as string;
+          wb = XLSX.read(text, { type: "string" });
+        } else {
+          const data = new Uint8Array(e.target!.result as ArrayBuffer);
+          wb = XLSX.read(data, { type: "array" });
+        }
         const teachers = parseWorkbook(wb);
         setRows(teachers);
         if (teachers.length === 0) {
@@ -165,7 +172,8 @@ export default function TeacherImportWizard() {
         setParseError((err as Error).message || "อ่านไฟล์ไม่สำเร็จ");
       }
     };
-    reader.readAsArrayBuffer(file);
+    if (isCsv) reader.readAsText(file, "UTF-8");
+    else reader.readAsArrayBuffer(file);
   }
 
   async function handleImport() {
@@ -274,12 +282,12 @@ export default function TeacherImportWizard() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
             </div>
-            <p className="font-semibold text-base-black mb-1">อัปโหลดไฟล์ Excel (.xlsx)</p>
+            <p className="font-semibold text-base-black mb-1">อัปโหลดไฟล์</p>
             <p className="text-sm text-base-black/40">ลากมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
-            <p className="text-xs text-base-black/30 mt-2">รองรับ sheet "Template_Teacher"</p>
+            <p className="text-xs text-base-black/30 mt-2">รองรับ .xlsx, .xls, .csv</p>
           </label>
 
-          <input id={fileInputId} type="file" accept=".xlsx,.xls" className="sr-only"
+          <input id={fileInputId} type="file" accept=".xlsx,.xls,.csv" className="sr-only"
             onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
 
           {parseError && (
