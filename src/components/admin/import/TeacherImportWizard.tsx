@@ -67,8 +67,8 @@ function getVal(row: Record<string, unknown>, targetKey: string): string {
 }
 
 function downloadTemplate() {
-  const headers = ["ลำดับ", "รหัสบัตรประชาชน", "คำนำหน้า", "ชื่อ", "นามสกุล", "รหัสครูผู้สอน", "Username", "Password", "ชั้นที่สอน", "กลุ่มสาระที่สอน"];
-  const sample  = ["1", "1212212112121", "นาย", "อ่อนโยน", "ใจดี", "T0001", "T0001", "Skdw1212212112121", "ม.2, ม.3", "วิทยาศาสตร์และเทคโนโลยี"];
+  const headers = ["ลำดับ", "รหัสบัตรประชาชน", "คำนำหน้า", "ชื่อ", "นามสกุล", "รหัสครูผู้สอน", "Username", "Password", "Email", "ชั้นที่สอน", "กลุ่มสาระที่สอน"];
+  const sample  = ["1", "1212212112121", "นาย", "อ่อนโยน", "ใจดี", "T0001", "T0001", "Skdw1212212112121", "onyon.jai@sukhon.ac.th", "ม.2, ม.3", "วิทยาศาสตร์และเทคโนโลยี"];
   const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
   ws["!cols"] = headers.map(() => ({ wch: 20 }));
   const wb = XLSX.utils.book_new();
