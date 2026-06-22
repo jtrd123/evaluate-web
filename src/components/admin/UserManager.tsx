@@ -299,7 +299,7 @@ function AddTeacherModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
               </div>
               <div>
                 <label className="text-xs font-semibold text-base-black/60 mb-1 block">รหัสผ่าน <span className="text-red-500">*</span></label>
-                <input value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder="อย่างน้อย 6 ตัวอักษร" className={inp} />
+                <input type="password" value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder="อย่างน้อย 6 ตัวอักษร" className={inp} />
               </div>
             </div>
             {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
@@ -389,7 +389,7 @@ function AddStudentModal({ classes, onClose, onAdded }: { classes: ClassItem[]; 
               </div>
               <div>
                 <label className="text-xs font-semibold text-base-black/60 mb-1 block">รหัสผ่าน <span className="text-red-500">*</span></label>
-                <input value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder="อย่างน้อย 6 ตัวอักษร" className={inp} />
+                <input type="password" value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder="อย่างน้อย 6 ตัวอักษร" className={inp} />
               </div>
             </div>
             {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
