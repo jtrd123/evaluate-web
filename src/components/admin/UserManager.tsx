@@ -314,6 +314,96 @@ function AddTeacherModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   );
 }
 
+function AddStudentModal({ classes, onClose, onAdded }: { classes: ClassItem[]; onClose: () => void; onAdded: (s: Student) => void }) {
+  const [form, setForm] = useState({ full_name: "", student_number: "", class_id: "", password: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ email: string } | null>(null);
+
+  async function handleSave() {
+    setSaving(true); setError(null);
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, role: "student" }),
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(data.error); return; }
+    const cls = classes.find((c) => c.id === form.class_id);
+    onAdded({
+      id: data.user.id,
+      full_name: data.user.full_name,
+      email: data.email,
+      student_number: data.user.student_number ?? null,
+      class_id: data.user.class_id ?? null,
+      class_name: cls?.name ?? null,
+      class_year: cls?.academic_year ?? null,
+    });
+    setDone({ email: data.email });
+  }
+
+  const inp = "w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+        {done ? (
+          <>
+            <div className="flex flex-col items-center gap-3 py-2">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              </div>
+              <p className="font-bold text-base-black">เพิ่มนักเรียนสำเร็จ</p>
+              <div className="bg-gray-50 rounded-xl px-4 py-3 text-center w-full">
+                <p className="text-xs text-base-black/50 mb-1">ข้อมูล Login</p>
+                <p className="text-sm font-mono font-bold text-primary">{done.email}</p>
+                <p className="text-sm font-mono text-base-black/60">{form.password}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="mt-4 w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90">ปิด</button>
+          </>
+        ) : (
+          <>
+            <h3 className="font-bold text-base-black mb-5">เพิ่มนักเรียนทีละคน</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-base-black/60 mb-1 block">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                <input value={form.full_name} onChange={(e) => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="เช่น เด็กชายสมชาย ใจดี" className={inp} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-base-black/60 mb-1 block">รหัสนักเรียน <span className="text-red-500">*</span></label>
+                <input value={form.student_number} onChange={(e) => setForm(f => ({ ...f, student_number: e.target.value }))} placeholder="เช่น 10001" className={inp} />
+                {form.student_number && <p className="text-xs text-base-black/40 mt-1 ml-1">Email: {form.student_number}@sukhon.ac.th</p>}
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-base-black/60 mb-1 block">ห้องเรียน</label>
+                <select value={form.class_id} onChange={(e) => setForm(f => ({ ...f, class_id: e.target.value }))} className={inp}>
+                  <option value="">-- ไม่ระบุ --</option>
+                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-base-black/60 mb-1 block">รหัสผ่าน <span className="text-red-500">*</span></label>
+                <input value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder="อย่างน้อย 6 ตัวอักษร" className={inp} />
+              </div>
+            </div>
+            {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
+            <div className="flex gap-2 mt-5">
+              <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-50">
+                {saving ? "กำลังบันทึก..." : "เพิ่มนักเรียน"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "ผู้ดูแลระบบ",
   teacher: "ครูผู้สอน",
@@ -445,6 +535,7 @@ export default function UserManager({ teachers: initTeachers, students: initStud
   const [changeRoleId, setChangeRoleId] = useState<string | null>(null);
   const [bulkDeleteYear, setBulkDeleteYear] = useState<string | null>(null);
   const [addingTeacher, setAddingTeacher] = useState(false);
+  const [addingStudent, setAddingStudent] = useState(false);
   const [search, setSearch] = useState("");
   const [yearFilter, setYearFilter] = useState<string>("__all__");
 
@@ -493,14 +584,21 @@ export default function UserManager({ teachers: initTeachers, students: initStud
             ))}
           </div>
           {tab === "teachers" && (
-            <button
-              onClick={() => setAddingTeacher(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0"
-            >
+            <button onClick={() => setAddingTeacher(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
               เพิ่มครู
+            </button>
+          )}
+          {tab === "students" && (
+            <button onClick={() => setAddingStudent(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              เพิ่มนักเรียน
             </button>
           )}
           <input
@@ -699,10 +797,15 @@ export default function UserManager({ teachers: initTeachers, students: initStud
       {addingTeacher && (
         <AddTeacherModal
           onClose={() => setAddingTeacher(false)}
-          onAdded={(t) => {
-            setTeachers((prev) => [...prev, t]);
-            setAddingTeacher(false);
-          }}
+          onAdded={(t) => { setTeachers((prev) => [...prev, t]); setAddingTeacher(false); }}
+        />
+      )}
+
+      {addingStudent && (
+        <AddStudentModal
+          classes={classes}
+          onClose={() => setAddingStudent(false)}
+          onAdded={(s) => { setStudents((prev) => [...prev, s]); setAddingStudent(false); }}
         />
       )}
 
