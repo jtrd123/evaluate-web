@@ -37,9 +37,10 @@ export async function POST(req: NextRequest) {
   let profileFields: Record<string, unknown>;
 
   if (role === "teacher") {
-    const { employee_id, subject, teaching_levels } = body;
+    const { employee_id, ms_email, subject, teaching_levels } = body;
     if (!employee_id?.trim()) return NextResponse.json({ error: "กรุณาใส่รหัสครู" }, { status: 400 });
-    email = `${employee_id.trim().toLowerCase()}@sukhon.ac.th`;
+    if (!ms_email?.trim()) return NextResponse.json({ error: "กรุณาใส่ Microsoft 365 Email" }, { status: 400 });
+    email = ms_email.trim().toLowerCase();
     profileFields = {
       full_name: full_name.trim(),
       employee_id: employee_id.trim(),
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
 
   if (authError) {
     const msg = authError.message.includes("already been registered")
-      ? "รหัสนี้มีบัญชีอยู่แล้ว"
+      ? "Email นี้มีบัญชีอยู่แล้ว"
       : authError.message;
     return NextResponse.json({ error: msg }, { status: 400 });
   }

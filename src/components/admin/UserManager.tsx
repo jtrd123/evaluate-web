@@ -222,7 +222,7 @@ function EditStudentRow({ student, classes, onSave, onCancel }: {
 }
 
 function AddTeacherModal({ onClose, onAdded }: { onClose: () => void; onAdded: (t: Teacher) => void }) {
-  const [form, setForm] = useState({ full_name: "", employee_id: "", subject: "", teaching_levels: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", employee_id: "", ms_email: "", subject: "", teaching_levels: "", password: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ email: string } | null>(null);
@@ -282,10 +282,12 @@ function AddTeacherModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
               </div>
               <div>
                 <label className="text-xs font-semibold text-base-black/60 mb-1 block">รหัสครู <span className="text-red-500">*</span></label>
-                <div className="flex items-center gap-1">
-                  <input value={form.employee_id} onChange={(e) => setForm(f => ({ ...f, employee_id: e.target.value }))} placeholder="เช่น T0001" className={inp} />
-                </div>
-                {form.employee_id && <p className="text-xs text-base-black/40 mt-1 ml-1">Email: {form.employee_id.toLowerCase()}@sukhon.ac.th</p>}
+                <input value={form.employee_id} onChange={(e) => setForm(f => ({ ...f, employee_id: e.target.value }))} placeholder="เช่น T0001" className={inp} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-base-black/60 mb-1 block">Microsoft 365 Email <span className="text-red-500">*</span></label>
+                <input value={form.ms_email} onChange={(e) => setForm(f => ({ ...f, ms_email: e.target.value }))} placeholder="เช่น somchai.jai@sukhon.ac.th" className={inp} type="email" />
+                <p className="text-xs text-base-black/40 mt-1 ml-1">ใช้เป็น Email login ทั้ง password และ Microsoft SSO</p>
               </div>
               <div>
                 <label className="text-xs font-semibold text-base-black/60 mb-1 block">กลุ่มสาระ</label>
