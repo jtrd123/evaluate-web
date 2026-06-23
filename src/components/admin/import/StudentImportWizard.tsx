@@ -410,12 +410,16 @@ export default function StudentImportWizard() {
         <div className="bg-red-50 rounded-2xl border border-red-200 p-4">
           <p className="text-sm font-bold text-red-700 mb-3">รายการที่ผิดพลาด ({result.errors.length} รายการ)</p>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {result.errors.map((e, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs text-red-700">
-                <span className="font-mono shrink-0">แถว {e.row}:</span>
-                <span>{translateError(e.message)}</span>
-              </div>
-            ))}
+            {result.errors.map((e, i) => {
+              const person = importedRows[e.row - 1];
+              return (
+                <div key={i} className="flex items-start gap-2 text-xs text-red-700 bg-red-100/50 rounded-lg px-2 py-1.5">
+                  <span className="font-mono shrink-0 text-red-400">แถว {e.row}</span>
+                  {person && <span className="font-semibold shrink-0">{person.full_name}</span>}
+                  <span className="text-red-600">{translateError(e.message)}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
