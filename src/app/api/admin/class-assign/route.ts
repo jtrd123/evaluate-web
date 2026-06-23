@@ -36,6 +36,64 @@ function serviceClient() {
   );
 }
 
+export async function GET(req: NextRequest) {
+  const supa = await getAdminOrNull();
+  if (!supa) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const period_id = new URL(req.url).searchParams.get("period_id");
+  if (!period_id) return NextResponse.json({ error: "Missing period_id" }, { status: 400 });
+
+  const admin = serviceClient();
+  const { data, error } = await admin
+    .from("class_teacher_subjects")
+    .select(`id, class_id, teacher_id, class:classes(id, name, academic_year), teacher:profiles!class_teacher_subjects_teacher_id_fkey(id, full_name, employee_id)`)
+    .eq("period_id", period_id)
+    .order("class_id");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ relationships: data ?? [] });
+}
+
+export async function DELETE(req: NextRequest) {
+  const supa = await getAdminOrNull();
+  if (!supa) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await req.json() as { id: string };
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  const admin = serviceClient();
+
+  const { data: cts } = await admin
+    .from("class_teacher_subjects")
+    .select("class_id, teacher_id, period_id")
+    .eq("id", id)
+    .single();
+
+  if (!cts) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Remove individual student assignments for this class-teacher-period
+  const { data: classStudents } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("class_id", cts.class_id)
+    .eq("role", "student");
+
+  const studentIds = (classStudents ?? []).map((s: { id: string }) => s.id);
+  if (studentIds.length > 0) {
+    await admin
+      .from("teacher_assignments")
+      .delete()
+      .eq("teacher_id", cts.teacher_id)
+      .eq("period_id", cts.period_id)
+      .in("student_id", studentIds);
+  }
+
+  const { error } = await admin.from("class_teacher_subjects").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: NextRequest) {
   const supa = await getAdminOrNull();
   if (!supa) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

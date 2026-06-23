@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import AssignmentManager from "@/components/admin/AssignmentManager";
 import ClassAssignmentPanel from "@/components/admin/ClassAssignmentPanel";
+import ClassTeacherView from "@/components/admin/ClassTeacherView";
 import YearSelector from "@/components/admin/YearSelector";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +79,12 @@ export default async function AssignmentsPage({
     assignmentsQuery,
   ]);
 
+  // Student count per class (for ClassTeacherView)
+  const studentCounts: Record<string, number> = {};
+  for (const s of students ?? []) {
+    if (s.class_id) studentCounts[s.class_id] = (studentCounts[s.class_id] ?? 0) + 1;
+  }
+
   return (
     <div className="animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -97,6 +104,15 @@ export default async function AssignmentsPage({
           classes={classes ?? []}
           forms={forms ?? []}
           periods={periods ?? []}
+        />
+      </div>
+
+      {/* Relationship overview */}
+      <div className="mb-6">
+        <ClassTeacherView
+          periods={periods ?? []}
+          classes={classes ?? []}
+          studentCounts={studentCounts}
         />
       </div>
 
