@@ -28,31 +28,38 @@ export async function DELETE(req: NextRequest) {
   const admin = await getAdminOrNull();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { year, role } = await req.json() as { year: string; role: "student" | "teacher" };
-  if (!year || !role) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const { year, role } = await req.json() as { year: string | null; role: "student" | "teacher" };
+  if (!role) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
 
   const supa = adminClient();
   let profileIds: string[] = [];
 
   if (role === "teacher") {
-    const { data } = await supa.from("profiles").select("id").eq("role", "teacher").eq("academic_year", year);
+    let q = supa.from("profiles").select("id").eq("role", "teacher");
+    if (year) q = q.eq("academic_year", year);
+    const { data } = await q;
     profileIds = (data ?? []).map((p: { id: string }) => p.id);
   } else {
-    // Students: match via academic_year on profile OR via class's academic_year
-    const [byProfile, byClass] = await Promise.all([
-      supa.from("profiles").select("id").eq("role", "student").eq("academic_year", year),
-      supa.from("classes").select("id").eq("academic_year", year),
-    ]);
-    const classIds = (byClass.data ?? []).map((c: { id: string }) => c.id);
-    const byClassStudents = classIds.length > 0
-      ? await supa.from("profiles").select("id").eq("role", "student").in("class_id", classIds)
-      : { data: [] };
-
-    const allIds = new Set([
-      ...(byProfile.data ?? []).map((p: { id: string }) => p.id),
-      ...(byClassStudents.data ?? []).map((p: { id: string }) => p.id),
-    ]);
-    profileIds = Array.from(allIds);
+    if (year) {
+      // Students: match via academic_year on profile OR via class's academic_year
+      const [byProfile, byClass] = await Promise.all([
+        supa.from("profiles").select("id").eq("role", "student").eq("academic_year", year),
+        supa.from("classes").select("id").eq("academic_year", year),
+      ]);
+      const classIds = (byClass.data ?? []).map((c: { id: string }) => c.id);
+      const byClassStudents = classIds.length > 0
+        ? await supa.from("profiles").select("id").eq("role", "student").in("class_id", classIds)
+        : { data: [] };
+      const allIds = new Set([
+        ...(byProfile.data ?? []).map((p: { id: string }) => p.id),
+        ...(byClassStudents.data ?? []).map((p: { id: string }) => p.id),
+      ]);
+      profileIds = Array.from(allIds);
+    } else {
+      // Delete ALL students
+      const { data } = await supa.from("profiles").select("id").eq("role", "student");
+      profileIds = (data ?? []).map((p: { id: string }) => p.id);
+    }
   }
 
   if (profileIds.length === 0) return NextResponse.json({ deleted: 0 });

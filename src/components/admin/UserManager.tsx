@@ -480,13 +480,16 @@ function ChangeRoleModal({ userId, userName, currentRole, onClose, onChanged }: 
 }
 
 function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
-  year: string; role: "teacher" | "student"; count: number;
+  year: string | null; role: "teacher" | "student"; count: number;
   onClose: () => void; onDeleted: () => void;
 }) {
+  const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const CONFIRM_WORD = "ลบทั้งหมด";
 
   async function handleDelete() {
+    if (confirmText !== CONFIRM_WORD) return;
     setDeleting(true); setError(null);
     const res = await fetch("/api/admin/users/bulk-delete", {
       method: "DELETE",
@@ -500,6 +503,11 @@ function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
   }
 
   const label = role === "teacher" ? "ครู" : "นักเรียน";
+  const title = year ? `ลบ${label}ปีการศึกษา ${year}?` : `ลบ${label}ทั้งหมด?`;
+  const subtitle = year
+    ? `${label}ในปีการศึกษา ${year} จำนวน ${count} คน จะถูกลบออก`
+    : `${label}ทั้งหมด ${count} คน (ทุกปีการศึกษา) จะถูกลบออก`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
@@ -508,13 +516,23 @@ function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
         </div>
-        <h3 className="font-bold text-base-black text-center mb-1">ลบทั้งปีการศึกษา {year}?</h3>
-        <p className="text-sm text-base-black/60 text-center mb-1">{label}ทั้งหมด {count} คน จะถูกลบออก</p>
-        <p className="text-xs text-red-600 text-center mb-5">การดำเนินการนี้ไม่สามารถยกเลิกได้ ข้อมูลและประวัติทั้งหมดจะถูกลบถาวร</p>
+        <h3 className="font-bold text-base-black text-center mb-1">{title}</h3>
+        <p className="text-sm text-base-black/60 text-center mb-1">{subtitle}</p>
+        <p className="text-xs text-red-600 text-center mb-4">การดำเนินการนี้ไม่สามารถยกเลิกได้ ข้อมูลและประวัติทั้งหมดจะถูกลบถาวร</p>
+        <div className="bg-gray-50 rounded-xl px-3 py-2.5 mb-4">
+          <p className="text-xs text-base-black/50 mb-1.5">พิมพ์ <span className="font-mono font-bold text-base-black">{CONFIRM_WORD}</span> เพื่อยืนยัน</p>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={CONFIRM_WORD}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 bg-white"
+          />
+        </div>
         {error && <p className="text-xs text-red-600 mb-3 text-center">{error}</p>}
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50">ยกเลิก</button>
-          <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-50">
+          <button onClick={handleDelete} disabled={deleting || confirmText !== CONFIRM_WORD} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-40 transition-all">
             {deleting ? "กำลังลบ..." : `ลบ ${count} คน`}
           </button>
         </div>
@@ -536,6 +554,7 @@ export default function UserManager({ teachers: initTeachers, students: initStud
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [changeRoleId, setChangeRoleId] = useState<string | null>(null);
   const [bulkDeleteYear, setBulkDeleteYear] = useState<string | null>(null);
+  const [bulkDeleteAll, setBulkDeleteAll] = useState(false);
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [addingStudent, setAddingStudent] = useState(false);
   const [search, setSearch] = useState("");
@@ -586,22 +605,44 @@ export default function UserManager({ teachers: initTeachers, students: initStud
             ))}
           </div>
           {tab === "teachers" && (
-            <button onClick={() => setAddingTeacher(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              เพิ่มครู
-            </button>
+            <>
+              <button onClick={() => setAddingTeacher(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                เพิ่มครู
+              </button>
+              {teachers.length > 0 && (
+                <button onClick={() => setBulkDeleteAll(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-600 bg-red-50 text-sm font-bold hover:bg-red-100 transition-all shrink-0">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  ลบครูทั้งหมด
+                </button>
+              )}
+            </>
           )}
           {tab === "students" && (
-            <button onClick={() => setAddingStudent(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              เพิ่มนักเรียน
-            </button>
+            <>
+              <button onClick={() => setAddingStudent(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shrink-0">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                เพิ่มนักเรียน
+              </button>
+              {students.length > 0 && (
+                <button onClick={() => setBulkDeleteAll(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-600 bg-red-50 text-sm font-bold hover:bg-red-100 transition-all shrink-0">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  ลบนักเรียนทั้งหมด
+                </button>
+              )}
+            </>
           )}
           <input
             type="search"
@@ -791,6 +832,21 @@ export default function UserManager({ teachers: initTeachers, students: initStud
               setStudents((prev) => prev.filter((s) => s.class_year !== bulkDeleteYear));
             }
             setBulkDeleteYear(null);
+            setYearFilter("__all__");
+          }}
+        />
+      )}
+
+      {bulkDeleteAll && (
+        <BulkDeleteModal
+          year={null}
+          role={tab === "teachers" ? "teacher" : "student"}
+          count={tab === "teachers" ? teachers.length : students.length}
+          onClose={() => setBulkDeleteAll(false)}
+          onDeleted={() => {
+            if (tab === "teachers") setTeachers([]);
+            else setStudents([]);
+            setBulkDeleteAll(false);
             setYearFilter("__all__");
           }}
         />
