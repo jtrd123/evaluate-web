@@ -29,7 +29,10 @@ const COLUMN_MAP: Record<string, string> = {
   "Password": "password",
   "password": "password",
   "รหัสนักศึกษา": "student_number",
+  "รหัสนักเรียน": "student_number",
+  "เลขประจำตัวนักเรียน": "student_number",
   "รหัสบัตรประชาชน": "national_id",
+  "เลขบัตรประชาชน": "national_id",
   "ชั้น/ห้อง": "class_name",
   "ชั้น": "grade",
   "ห้อง": "room",
@@ -95,7 +98,6 @@ function parseWorkbook(wb: XLSX.WorkBook): { students: ParsedStudent[]; inactive
 
     let email = getVal(row, "email");
     if (!email && studentNum) email = `${studentNum}@sukhon.ac.th`;
-    else if (email) email = email.replace(/^0+(\d+@)/, "$1");
 
     let password = getVal(row, "password");
     if (!password && nationalId) password = `Skdw${nationalId}`;

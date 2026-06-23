@@ -14,9 +14,17 @@ function adminSupa() {
 export default async function UsersPage() {
   const supa = adminSupa();
 
-  // Fetch all auth users to get emails
-  const { data: authList } = await supa.auth.admin.listUsers({ perPage: 1000 });
-  const emailMap = new Map((authList?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+  // Fetch all auth users to get emails (paginate to handle >1000 users)
+  const allAuthUsers: { id: string; email?: string }[] = [];
+  let page = 1;
+  while (true) {
+    const { data: authList } = await supa.auth.admin.listUsers({ perPage: 1000, page });
+    const users = authList?.users ?? [];
+    allAuthUsers.push(...users);
+    if (users.length < 1000) break;
+    page++;
+  }
+  const emailMap = new Map(allAuthUsers.map((u) => [u.id, u.email ?? ""]));
 
   const [{ data: teachers }, { data: students }, { data: classes }] = await Promise.all([
     supa.from("profiles")
