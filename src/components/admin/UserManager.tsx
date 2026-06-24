@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface ClassItem { id: string; name: string; academic_year: string; }
 
@@ -481,25 +482,32 @@ function ChangeRoleModal({ userId, userName, currentRole, onClose, onChanged }: 
 
 function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
   year: string | null; role: "teacher" | "student"; count: number;
-  onClose: () => void; onDeleted: () => void;
+  onClose: () => void; onDeleted: (removed: number) => void;
 }) {
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ profilesRemoved: number; deleted: number } | null>(null);
   const CONFIRM_WORD = "ลบทั้งหมด";
 
   async function handleDelete() {
     if (confirmText !== CONFIRM_WORD) return;
     setDeleting(true); setError(null);
-    const res = await fetch("/api/admin/users/bulk-delete", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year, role }),
-    });
-    const data = await res.json();
-    setDeleting(false);
-    if (!res.ok) { setError(data.error); return; }
-    onDeleted();
+    try {
+      const res = await fetch("/api/admin/users/bulk-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, role }),
+      });
+      const data = await res.json();
+      setDeleting(false);
+      if (!res.ok) { setError(data.error ?? "เกิดข้อผิดพลาด"); return; }
+      setResult({ profilesRemoved: data.profilesRemoved ?? 0, deleted: data.deleted ?? 0 });
+    } catch (err) {
+      setDeleting(false);
+      setError("เชื่อมต่อ server ไม่ได้ หรือ request timeout — ลองใหม่อีกครั้ง");
+      console.error("bulk-delete error:", err);
+    }
   }
 
   const label = role === "teacher" ? "ครู" : "นักเรียน";
@@ -511,37 +519,119 @@ function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
-        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-          <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        {result ? (
+          <>
+            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            </div>
+            <h3 className="font-bold text-base-black text-center mb-1">ลบเสร็จสิ้น</h3>
+            <p className="text-sm text-center text-base-black/60 mb-1">
+              ลบข้อมูล <span className="font-bold text-primary">{result.profilesRemoved}</span> คนออกจากระบบแล้ว
+            </p>
+            <p className="text-xs text-center text-base-black/40 mb-4">auth accounts ที่ถูกลบ: {result.deleted} คน</p>
+            <button onClick={() => { onDeleted(result.profilesRemoved); onClose(); }} className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all">ปิด</button>
+          </>
+        ) : (
+          <>
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <h3 className="font-bold text-base-black text-center mb-1">{title}</h3>
+            <p className="text-sm text-base-black/60 text-center mb-1">{subtitle}</p>
+            <p className="text-xs text-red-600 text-center mb-4">การดำเนินการนี้ไม่สามารถยกเลิกได้ ข้อมูลและประวัติทั้งหมดจะถูกลบถาวร</p>
+            <div className="bg-gray-50 rounded-xl px-3 py-2.5 mb-4">
+              <p className="text-xs text-base-black/50 mb-1.5">พิมพ์ <span className="font-mono font-bold text-base-black">{CONFIRM_WORD}</span> เพื่อยืนยัน</p>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={CONFIRM_WORD}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 bg-white"
+              />
+            </div>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-3">
+                <p className="text-xs text-red-700 text-center">{error}</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={onClose} disabled={deleting} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50 disabled:opacity-40">ยกเลิก</button>
+              <button onClick={handleDelete} disabled={deleting || confirmText !== CONFIRM_WORD} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-40 transition-all">
+                {deleting ? "กำลังลบ..." : `ลบ ${count} คน`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BatchResetModal({ year, count, onClose }: {
+  year: string | null; count: number; onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ reset: number; skipped: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleReset() {
+    setLoading(true); setError(null);
+    const res = await fetch("/api/admin/users/batch-reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year }),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok) { setError(data.error ?? "เกิดข้อผิดพลาด"); return; }
+    setResult(data);
+  }
+
+  const scope = year ? `ปีการศึกษา ${year} (${count} คน)` : `นักเรียนทั้งหมด ${count} คน`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
           </svg>
         </div>
-        <h3 className="font-bold text-base-black text-center mb-1">{title}</h3>
-        <p className="text-sm text-base-black/60 text-center mb-1">{subtitle}</p>
-        <p className="text-xs text-red-600 text-center mb-4">การดำเนินการนี้ไม่สามารถยกเลิกได้ ข้อมูลและประวัติทั้งหมดจะถูกลบถาวร</p>
-        <div className="bg-gray-50 rounded-xl px-3 py-2.5 mb-4">
-          <p className="text-xs text-base-black/50 mb-1.5">พิมพ์ <span className="font-mono font-bold text-base-black">{CONFIRM_WORD}</span> เพื่อยืนยัน</p>
-          <input
-            type="text"
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            placeholder={CONFIRM_WORD}
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 bg-white"
-          />
-        </div>
-        {error && <p className="text-xs text-red-600 mb-3 text-center">{error}</p>}
-        <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50">ยกเลิก</button>
-          <button onClick={handleDelete} disabled={deleting || confirmText !== CONFIRM_WORD} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-40 transition-all">
-            {deleting ? "กำลังลบ..." : `ลบ ${count} คน`}
-          </button>
-        </div>
+
+        {result ? (
+          <>
+            <h3 className="font-bold text-base-black text-center mb-2">รีเซ็ตเสร็จสิ้น</h3>
+            <p className="text-sm text-center text-base-black/60 mb-1">รีเซ็ตสำเร็จ <span className="font-bold text-primary">{result.reset} คน</span></p>
+            {result.skipped > 0 && (
+              <p className="text-xs text-center text-amber-600 mb-3">ข้าม {result.skipped} คน (ไม่มีรหัสนักเรียน)</p>
+            )}
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all mt-2">ปิด</button>
+          </>
+        ) : (
+          <>
+            <h3 className="font-bold text-base-black text-center mb-1">รีเซ็ตรหัสผ่านนักเรียน</h3>
+            <p className="text-sm text-base-black/60 text-center mb-1">{scope}</p>
+            <p className="text-xs text-base-black/40 text-center mb-4">รหัสผ่านใหม่จะถูกตั้งเป็น <span className="font-mono font-bold text-base-black/60">รหัสนักเรียน</span> ของแต่ละคน</p>
+            {error && <p className="text-xs text-red-600 mb-3 text-center">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={onClose} disabled={loading} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-base-black/60 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={handleReset} disabled={loading} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-40 transition-all">
+                {loading ? "กำลังรีเซ็ต..." : "รีเซ็ตรหัสผ่าน"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 export default function UserManager({ teachers: initTeachers, students: initStudents, classes }: Props) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("teachers");
   const [teachers, setTeachers] = useState<Teacher[]>(initTeachers);
   const [students, setStudents] = useState<Student[]>(initStudents);
@@ -555,6 +645,7 @@ export default function UserManager({ teachers: initTeachers, students: initStud
   const [changeRoleId, setChangeRoleId] = useState<string | null>(null);
   const [bulkDeleteYear, setBulkDeleteYear] = useState<string | null>(null);
   const [bulkDeleteAll, setBulkDeleteAll] = useState(false);
+  const [batchResetOpen, setBatchResetOpen] = useState(false);
   const [addingTeacher, setAddingTeacher] = useState(false);
   const [addingStudent, setAddingStudent] = useState(false);
   const [search, setSearch] = useState("");
@@ -634,13 +725,22 @@ export default function UserManager({ teachers: initTeachers, students: initStud
                 เพิ่มนักเรียน
               </button>
               {students.length > 0 && (
-                <button onClick={() => setBulkDeleteAll(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-600 bg-red-50 text-sm font-bold hover:bg-red-100 transition-all shrink-0">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                  </svg>
-                  ลบนักเรียนทั้งหมด
-                </button>
+                <>
+                  <button onClick={() => setBatchResetOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-blue-200 text-blue-600 bg-blue-50 text-sm font-bold hover:bg-blue-100 transition-all shrink-0">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                    </svg>
+                    รีเซ็ตรหัสผ่าน
+                  </button>
+                  <button onClick={() => setBulkDeleteAll(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-600 bg-red-50 text-sm font-bold hover:bg-red-100 transition-all shrink-0">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                    ลบนักเรียนทั้งหมด
+                  </button>
+                </>
               )}
             </>
           )}
@@ -833,6 +933,7 @@ export default function UserManager({ teachers: initTeachers, students: initStud
             }
             setBulkDeleteYear(null);
             setYearFilter("__all__");
+            router.refresh();
           }}
         />
       )}
@@ -848,7 +949,16 @@ export default function UserManager({ teachers: initTeachers, students: initStud
             else setStudents([]);
             setBulkDeleteAll(false);
             setYearFilter("__all__");
+            router.refresh();
           }}
+        />
+      )}
+
+      {batchResetOpen && (
+        <BatchResetModal
+          year={yearFilter === "__all__" ? null : yearFilter}
+          count={yearFilter === "__all__" ? students.length : filteredStudents.length}
+          onClose={() => setBatchResetOpen(false)}
         />
       )}
 

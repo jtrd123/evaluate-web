@@ -6,7 +6,15 @@ import { createClient } from "@/lib/supabase/client";
 import Button from "@/components/ui/Button";
 import type { EvaluationQuestion, AssignmentWithTeacher } from "@/lib/types/database.types";
 
-function StarRating({
+const FACE_OPTIONS = [
+  { value: 1, label: "ปรับปรุง",  emoji: "😞", color: "bg-red-100 border-red-300 text-red-600",    active: "bg-red-500 border-red-500 text-white" },
+  { value: 2, label: "พอใช้",     emoji: "😕", color: "bg-orange-100 border-orange-300 text-orange-600", active: "bg-orange-500 border-orange-500 text-white" },
+  { value: 3, label: "ดี",        emoji: "🙂", color: "bg-yellow-100 border-yellow-300 text-yellow-700", active: "bg-yellow-400 border-yellow-400 text-white" },
+  { value: 4, label: "ดีมาก",    emoji: "😊", color: "bg-lime-100 border-lime-300 text-lime-700",   active: "bg-lime-500 border-lime-500 text-white" },
+  { value: 5, label: "ดีเยี่ยม", emoji: "😄", color: "bg-green-100 border-green-300 text-green-700", active: "bg-green-500 border-green-500 text-white" },
+];
+
+function FaceRating({
   value,
   onChange,
   disabled,
@@ -15,41 +23,24 @@ function StarRating({
   onChange: (v: number) => void;
   disabled: boolean;
 }) {
-  const [hovered, setHovered] = useState(0);
-
-  const labels = ["", "ปรับปรุง", "พอใช้", "ดี", "ดีมาก", "ดีเยี่ยม"];
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
+    <div className="flex items-center gap-2 flex-wrap">
+      {FACE_OPTIONS.map((opt) => {
+        const isSelected = value === opt.value;
+        return (
           <button
-            key={star}
+            key={opt.value}
             type="button"
             disabled={disabled}
-            onClick={() => onChange(star)}
-            onMouseEnter={() => !disabled && setHovered(star)}
-            onMouseLeave={() => !disabled && setHovered(0)}
-            className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded disabled:cursor-not-allowed transition-transform hover:scale-110"
+            onClick={() => onChange(opt.value)}
+            className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-2xl border-2 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary disabled:cursor-not-allowed min-w-[60px]
+              ${isSelected ? opt.active + " scale-105 shadow-md" : opt.color + " hover:scale-105 hover:shadow-sm"}`}
           >
-            <svg
-              viewBox="0 0 20 20"
-              className={`w-9 h-9 transition-colors duration-100 ${
-                star <= (hovered || value)
-                  ? "fill-accent text-accent"
-                  : "fill-gray-200 text-gray-200"
-              }`}
-            >
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
+            <span className="text-2xl leading-none">{opt.emoji}</span>
+            <span className="text-[11px] font-semibold leading-none whitespace-nowrap">{opt.label}</span>
           </button>
-        ))}
-        {(hovered || value) > 0 && (
-          <span className="ml-2 text-sm font-semibold text-primary">
-            {labels[hovered || value]}
-          </span>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -269,7 +260,7 @@ export default function EvaluatePage() {
               </div>
 
               {q.question_type === "rating" ? (
-                <StarRating
+                <FaceRating
                   value={Number(answers[q.id] ?? 0)}
                   onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
                   disabled={submitting}

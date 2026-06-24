@@ -73,11 +73,12 @@ export default async function TeacherDashboard({
 
   // ── Fetch responses for filtered assignments ──────────────────────────────
   let typedResults: TeacherResult[] = [];
+  let classStats: Array<{ classId: string; className: string; average: number; respondents: number }> = [];
 
   if (filteredAssignmentIds.length > 0) {
     const { data: subsData } = await supabase
       .from("evaluation_submissions")
-      .select("id, submitted_at")
+      .select("id, submitted_at, assignment_id")
       .in("assignment_id", filteredAssignmentIds)
       .eq("is_submitted", true);
 
@@ -94,6 +95,36 @@ export default async function TeacherDashboard({
           .in("form_id", formIds)
           .order("order_index"),
       ]);
+
+      // ── Compute per-class stats (for comparison table) ─────────────────────
+      if (!classId && teacherClasses.length > 1) {
+        const assignmentClassMap = new Map(filteredAssignments.map((a) => [a.id, a.class_id]));
+        const subClassMap = new Map((subsData ?? []).map((s) => [s.id, assignmentClassMap.get(s.assignment_id) ?? null]));
+
+        const classRatingMap = new Map<string, { sum: number; count: number; respondents: Set<string> }>();
+        for (const r of responsesData ?? []) {
+          if (r.rating_value === null) continue;
+          const cid = subClassMap.get(r.submission_id);
+          const key = cid ?? "__none__";
+          const cur = classRatingMap.get(key) ?? { sum: 0, count: 0, respondents: new Set<string>() };
+          cur.sum += r.rating_value;
+          cur.count++;
+          cur.respondents.add(r.submission_id);
+          classRatingMap.set(key, cur);
+        }
+
+        classStats = Array.from(classRatingMap.entries())
+          .map(([cid, { sum, count, respondents }]) => {
+            const cls = teacherClasses.find((c) => c.id === cid);
+            return {
+              classId: cid,
+              className: cls?.name ?? "ไม่ระบุ",
+              average: count > 0 ? sum / count : 0,
+              respondents: respondents.size,
+            };
+          })
+          .sort((a, b) => b.average - a.average);
+      }
 
       const questionMap = new Map((questionsData ?? []).map((q) => [q.id, q]));
       const submissionMap = new Map((subsData ?? []).map((s) => [s.id, s]));
@@ -196,6 +227,56 @@ export default async function TeacherDashboard({
             <p className="text-xs font-semibold text-base-black/50 mb-2">กรองตามชั้น</p>
             <ClassSelector classes={teacherClasses} currentClassId={classId ?? ""} />
           </div>
+        )}
+
+        {/* Class comparison table */}
+        {teacherClasses.length > 1 && !classId && classStats.length > 0 && (
+          <section className="card mb-6 animate-slide-up">
+            <h2 className="text-base font-bold text-primary mb-4">คะแนนแยกตามชั้นเรียน</h2>
+            <div className="overflow-x-auto rounded-xl border border-gray-100">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-base-black/40">ห้อง</th>
+                    <th className="text-center px-4 py-2.5 text-xs font-semibold text-base-black/40">คะแนนเฉลี่ย</th>
+                    <th className="text-center px-4 py-2.5 text-xs font-semibold text-base-black/40">ผู้ประเมิน</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-base-black/40 w-44 hidden sm:table-cell">กราฟ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {classStats.map((cs, i) => (
+                    <tr key={cs.classId} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-4 py-2.5">
+                        <Link
+                          href={`/teacher?classId=${cs.classId}${year ? `&year=${year}` : ""}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {cs.className}
+                        </Link>
+                        {i === 0 && classStats.length > 1 && (
+                          <span className="ml-2 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full font-semibold">สูงสุด</span>
+                        )}
+                        {i === classStats.length - 1 && classStats.length > 1 && (
+                          <span className="ml-2 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-semibold">ต่ำสุด</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center font-bold text-primary">{cs.average.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 text-center text-base-black/50">{cs.respondents} คน</td>
+                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all"
+                            style={{ width: `${Math.min((cs.average / 5) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-base-black/40 mt-3">คลิกชื่อห้องเพื่อดูรายละเอียดของแต่ละชั้น</p>
+          </section>
         )}
 
         {/* Summary stats */}
