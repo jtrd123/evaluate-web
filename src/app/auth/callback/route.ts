@@ -38,25 +38,28 @@ export async function GET(request: Request) {
         }
 
         // No profile for this OAuth user — check if their email exists in system
+        // Paginate through ALL auth users to avoid the 1000-row default limit
         const supa = adminClient();
         const email = user.email ?? "";
 
         let emailExistsInSystem = false;
         if (email) {
-          // 1. Check auth.users email match (student/same-email case)
-          const { data: existingUsers } = await supa.auth.admin.listUsers({ perPage: 1000 });
-          const match = existingUsers?.users?.find(
-            (u) => u.email === email && u.id !== user.id
-          );
-          if (match) {
-            const { data: matchProfile } = await supa
-              .from("profiles")
-              .select("id")
-              .eq("id", match.id)
-              .single();
-            if (matchProfile) emailExistsInSystem = true;
+          let page = 1;
+          outer: while (true) {
+            const { data: authList } = await supa.auth.admin.listUsers({ perPage: 1000, page });
+            const users = authList?.users ?? [];
+            const match = users.find((u) => u.email === email && u.id !== user.id);
+            if (match) {
+              const { data: matchProfile } = await supa
+                .from("profiles")
+                .select("id")
+                .eq("id", match.id)
+                .single();
+              if (matchProfile) { emailExistsInSystem = true; break outer; }
+            }
+            if (users.length < 1000) break;
+            page++;
           }
-
         }
 
         // Delete the orphaned OAuth user

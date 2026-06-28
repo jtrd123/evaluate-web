@@ -12,7 +12,7 @@ export interface RawAssignment { id: string; student_id: string; teacher_id: str
 export interface RawSubmission { id: string; assignment_id: string; student_id: string; teacher_id: string; is_submitted: boolean; submitted_at: string; }
 export interface RawResponse { id: string; submission_id: string; question_id: string; rating_value: number | null; text_value: string | null; }
 export interface RawQuestion { id: string; question_text: string; question_type: string; order_index: number; }
-export interface RawProfile { id: string; full_name: string; subject: string | null; employee_id: string | null; student_number: string | null; role: string; }
+export interface RawProfile { id: string; full_name: string; subject: string | null; employee_id: string | null; student_number: string | null; role: string; avatar_url?: string | null; }
 export interface RawClass { id: string; name: string; academic_year: string; }
 
 // ── Computed types ─────────────────────────────────────────────────────────

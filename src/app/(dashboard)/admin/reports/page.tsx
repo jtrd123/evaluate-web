@@ -19,7 +19,7 @@ export default async function ReportsPage() {
     supabase.from("evaluation_submissions").select("id, assignment_id, student_id, teacher_id, is_submitted, submitted_at").eq("is_submitted", true),
     supabase.from("evaluation_responses").select("id, submission_id, question_id, rating_value, text_value"),
     supabase.from("evaluation_questions").select("id, question_text, question_type, order_index").order("order_index"),
-    supabase.from("profiles").select("id, full_name, subject, employee_id, student_number, role"),
+    supabase.from("profiles").select("id, full_name, subject, employee_id, student_number, role, avatar_url"),
     supabase.from("classes").select("id, name, academic_year"),
   ]);
 

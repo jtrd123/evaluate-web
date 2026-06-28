@@ -14,10 +14,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Environment files (keep examples)
+# Environment files (keep examples, never commit real secrets)
 .env*
 !.env.example
 !.env.local.example
+!.env.production.example
+!.env.docker.example
 
 # Vercel
 .vercel/

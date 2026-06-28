@@ -493,19 +493,35 @@ function BulkDeleteModal({ year, role, count, onClose, onDeleted }: {
   async function handleDelete() {
     if (confirmText !== CONFIRM_WORD) return;
     setDeleting(true); setError(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 58_000); // 58s — just under maxDuration
     try {
       const res = await fetch("/api/admin/users/bulk-delete", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ year, role }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       const data = await res.json();
       setDeleting(false);
-      if (!res.ok) { setError(data.error ?? "เกิดข้อผิดพลาด"); return; }
+      if (!res.ok) {
+        setError(data.error ?? "เกิดข้อผิดพลาด");
+        return;
+      }
+      // Show warning if some auth deletions failed (profiles still deleted — data is gone)
+      if ((data.authErrors?.length ?? 0) > 0) {
+        console.warn("auth deletion errors:", data.authErrors);
+      }
       setResult({ profilesRemoved: data.profilesRemoved ?? 0, deleted: data.deleted ?? 0 });
-    } catch (err) {
+    } catch (err: unknown) {
+      clearTimeout(timeout);
       setDeleting(false);
-      setError("เชื่อมต่อ server ไม่ได้ หรือ request timeout — ลองใหม่อีกครั้ง");
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("ใช้เวลานานเกินไป (>58 วิ) — กด refresh แล้วลองใหม่");
+      } else {
+        setError("เชื่อมต่อ server ไม่ได้ — ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่");
+      }
       console.error("bulk-delete error:", err);
     }
   }

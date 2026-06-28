@@ -1,33 +1,46 @@
-# ใช้ Node.js version 20 เป็นฐาน
-FROM node:20-slim AS base
-
-# ขั้นตอนการลง Dependencies
-FROM base AS deps
+# ── Stage 1: Install dependencies ────────────────────────────────────────────
+FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
+
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# ขั้นตอนการ Build
-FROM base AS builder
+# ── Stage 2: Build ────────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
 WORKDIR /app
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# ปิดการเก็บค่า build info เพื่อเลี่ยงบั๊กเดิม
-RUN rm -f tsconfig.tsbuildinfo
-RUN npm run build
 
-# ขั้นตอนการรันจริง (Runner)
-FROM base AS runner
+# NEXT_PUBLIC_* ต้องฝังตอน build (ถูกเอาไปใส่ใน JS bundle)
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN rm -f tsconfig.tsbuildinfo && npm run build
+
+# ── Stage 3: Production runner (standalone = image เล็กมาก) ──────────────────
+FROM node:20-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV production
 
-ENV HOSTNAME="0.0.0.0"
-ENV PORT=3000
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+# non-root user เพื่อความปลอดภัย
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser  --system --uid 1001 nextjs
+
+COPY --from=builder /app/public                               ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static   ./.next/static
+
+USER nextjs
 
 EXPOSE 3000
-# บังคับรัน Next.js ให้เปิดพอร์ต 3000 และรับทุก IP แบบดิ้นไม่หลุด
-CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+CMD ["node", "server.js"]
