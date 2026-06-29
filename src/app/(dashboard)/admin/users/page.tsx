@@ -26,37 +26,64 @@ export default async function UsersPage() {
   }
   const emailMap = new Map(allAuthUsers.map((u) => [u.id, u.email ?? ""]));
 
-  const [{ data: teachers }, { data: students }, { data: classes }] = await Promise.all([
-    supa.from("profiles")
-      .select("id, full_name, employee_id, subject, teaching_levels, academic_year, role")
-      .in("role", ["teacher", "admin"])
-      .order("full_name"),
-    supa.from("profiles")
-      .select("id, full_name, student_number, class_id, classes(name, academic_year)")
-      .eq("role", "student")
-      .order("full_name"),
-    supa.from("classes").select("id, name, academic_year").order("academic_year", { ascending: false }).order("name"),
-  ]);
+  // Paginate teachers (usually <1000 but safe)
+  const teacherRows: Record<string, unknown>[] = [];
+  {
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data } = await supa.from("profiles")
+        .select("id, full_name, employee_id, subject, teaching_levels, academic_year, role")
+        .in("role", ["teacher", "admin"])
+        .order("full_name")
+        .range(from, from + PAGE - 1);
+      teacherRows.push(...((data ?? []) as Record<string, unknown>[]));
+      if ((data?.length ?? 0) < PAGE) break;
+      from += PAGE;
+    }
+  }
 
-  const teacherList = (teachers ?? []).map((t) => ({
-    id: t.id,
-    full_name: t.full_name,
-    email: emailMap.get(t.id) ?? "",
-    employee_id: t.employee_id ?? null,
-    subject: t.subject ?? null,
-    teaching_levels: (t as Record<string, unknown>).teaching_levels as string | null ?? null,
-    academic_year: (t as Record<string, unknown>).academic_year as string | null ?? null,
-    role: (t.role ?? "teacher") as "admin" | "teacher" | "student",
+  // Paginate students (can exceed 1000)
+  const studentRows: Record<string, unknown>[] = [];
+  {
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data } = await supa.from("profiles")
+        .select("id, full_name, student_number, class_id, classes(name, academic_year)")
+        .eq("role", "student")
+        .order("full_name")
+        .range(from, from + PAGE - 1);
+      studentRows.push(...((data ?? []) as Record<string, unknown>[]));
+      if ((data?.length ?? 0) < PAGE) break;
+      from += PAGE;
+    }
+  }
+
+  const { data: classes } = await supa.from("classes")
+    .select("id, name, academic_year")
+    .order("academic_year", { ascending: false })
+    .order("name");
+
+  const teacherList = teacherRows.map((t) => ({
+    id: t.id as string,
+    full_name: t.full_name as string,
+    email: emailMap.get(t.id as string) ?? "",
+    employee_id: (t.employee_id as string | null) ?? null,
+    subject: (t.subject as string | null) ?? null,
+    teaching_levels: (t.teaching_levels as string | null) ?? null,
+    academic_year: (t.academic_year as string | null) ?? null,
+    role: ((t.role as string) ?? "teacher") as "admin" | "teacher" | "student",
   }));
 
-  const studentList = (students ?? []).map((s) => {
-    const cls = (s as Record<string, unknown>).classes as { name: string; academic_year: string } | null;
+  const studentList = studentRows.map((s) => {
+    const cls = s.classes as { name: string; academic_year: string } | null;
     return {
-      id: s.id,
-      full_name: s.full_name,
-      email: emailMap.get(s.id) ?? "",
-      student_number: s.student_number ?? null,
-      class_id: s.class_id ?? null,
+      id: s.id as string,
+      full_name: s.full_name as string,
+      email: emailMap.get(s.id as string) ?? "",
+      student_number: (s.student_number as string | null) ?? null,
+      class_id: (s.class_id as string | null) ?? null,
       class_name: cls?.name ?? null,
       class_year: cls?.academic_year ?? null,
     };
